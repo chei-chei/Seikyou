@@ -59,10 +59,25 @@
     }
 
     #reward {
-        font-size: 22px;
-        margin-top: 30px;
+        font-size: 20px;
+        margin-top: 20px;
         font-weight: bold;
         color: #d00000;
+    }
+
+
+    /* =========================
+       ガラスクラッシュ Canvas
+       ========================= */
+
+    #crackCanvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 10000;
     }
 
 
@@ -98,6 +113,32 @@
         letter-spacing: 5px;
         text-shadow: 0 0 10px #00ffff, 0 0 25px #0088ff;
         min-height: 90px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* 昇格スロット演出用スタイル */
+    .digitChar {
+        display: inline-block;
+        transition: transform 0.8s ease-in, opacity 0.8s ease-in;
+    }
+
+    .digitChar.popOut {
+        color: #ff3333 !important;
+        text-shadow: 0 0 25px #ff0000 !important;
+        transform: translateY(-90px) scale(1.8) rotate(25deg);
+        opacity: 0;
+    }
+
+    .digitChar.pushUp {
+        animation: pushUpAnim 1.0s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    @keyframes pushUpAnim {
+        0% { transform: translateY(120px) scale(0.2); opacity: 0; color: #ffd700; text-shadow: 0 0 30px gold; }
+        70% { transform: translateY(-15px) scale(1.4); opacity: 1; color: #ffd700; text-shadow: 0 0 30px gold; }
+        100% { transform: translateY(0) scale(1); opacity: 1; color: white; text-shadow: 0 0 10px #00ffff, 0 0 25px #0088ff; }
     }
 
     #resultType {
@@ -125,7 +166,7 @@
     .retryHint {
         margin-top: 40px;
         font-size: 18px;
-        color: #aaa;
+        color: #888;
         opacity: 0;
         transition: opacity 0.5s;
     }
@@ -135,7 +176,7 @@
     }
 
 
-    /* PERFECT & GREAT 演出 */
+    /* 各ランク判定の文字スタイル */
 
     .perfect {
         animation: perfectAppear 0.8s ease forwards, rainbowText 1.2s linear infinite;
@@ -157,16 +198,6 @@
         100% { color: magenta; text-shadow: 0 0 20px magenta; }
     }
 
-    .perfectDigits {
-        animation: perfectDigits 0.8s ease forwards;
-    }
-
-    @keyframes perfectDigits {
-        0% { transform: scale(0.5); opacity: 0; }
-        60% { transform: scale(1.15); opacity: 1; }
-        100% { transform: scale(1); opacity: 1; }
-    }
-
     .great {
         color: #00ffff;
         text-shadow: 0 0 15px #00ffff;
@@ -176,6 +207,49 @@
     @keyframes simpleAppear {
         from { transform: scale(0.8); opacity: 0; }
         to { transform: scale(1); opacity: 1; }
+    }
+
+
+    /* 💥 金文字「激熱」カットイン（約2秒間表示） */
+
+    #cutinOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 10002;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    #cutinOverlay.show {
+        display: flex;
+    }
+
+    .cutinText {
+        font-size: 130px;
+        font-weight: 900;
+        font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+        background: linear-gradient(180deg, #ffffff 0%, #fff0a0 30%, #ffd700 60%, #b8860b 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: 25px;
+        text-shadow: none;
+        filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 140, 0, 0.8));
+        transform: scale(0.3);
+        opacity: 0;
+        animation: gekiatsuAnim 2.0s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+    }
+
+    @keyframes gekiatsuAnim {
+        0% { transform: scale(2.8); opacity: 0; filter: blur(12px) drop-shadow(0 0 40px gold); }
+        15% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 20px gold) drop-shadow(0 0 40px rgba(255,69,0,0.8)); }
+        80% { transform: scale(1.0); opacity: 1; filter: drop-shadow(0 0 25px gold) drop-shadow(0 0 50px rgba(255,69,0,0.9)); }
+        100% { transform: scale(0.7); opacity: 0; filter: blur(8px); }
     }
 
 
@@ -196,6 +270,7 @@
         flex-direction: column;
         z-index: 10001;
         color: white;
+        cursor: pointer;
     }
 
     #rouletteOverlay.show {
@@ -209,7 +284,6 @@
         text-shadow: 0 0 10px gold;
     }
 
-    /* ドラム枠を3つ横並びに */
     .slotsContainer {
         display: flex;
         gap: 15px;
@@ -264,7 +338,7 @@
     }
 
 
-    /* フラッシュ & 振動 & アニメーション */
+    /* フラッシュ & アニメーション */
 
     #flash {
         position: fixed;
@@ -275,7 +349,7 @@
         background: white;
         opacity: 0;
         pointer-events: none;
-        z-index: 10000;
+        z-index: 10001;
     }
 
     #flash.active { animation: flash 0.45s ease; }
@@ -284,17 +358,6 @@
         0% { opacity: 0; }
         20% { opacity: 1; }
         100% { opacity: 0; }
-    }
-
-    .shake { animation: shake 0.5s ease; }
-
-    @keyframes shake {
-        0%   { transform: translate(0, 0); }
-        20%  { transform: translate(-8px, 5px); }
-        40%  { transform: translate(8px, -5px); }
-        60%  { transform: translate(-6px, -3px); }
-        80%  { transform: translate(6px, 3px); }
-        100% { transform: translate(0, 0); }
     }
 
     @keyframes rewardAppear {
@@ -333,21 +396,25 @@
     <div id="reward"></div>
 </div>
 
+<!-- 画面割れ演出用Canvas -->
+<canvas id="crackCanvas"></canvas>
+
+<!-- 洗練された金文字激熱カットイン（2秒） -->
+<div id="cutinOverlay">
+    <div class="cutinText">激熱</div>
+</div>
 
 <!-- 暗転結果演出 -->
-
 <div id="effect">
     <div id="resultDigits"></div>
     <div id="resultType"></div>
     <div id="resultReward"></div>
-    <div id="retryHint" class="retryHint">タップして景品分配へ</div>
+    <div id="retryHint" class="retryHint">Enterキーかタップで次へ</div>
 </div>
 
-
 <!-- 景品分配ルーレット画面 -->
-
 <div id="rouletteOverlay">
-    <div class="rouletteTitle" id="rouletteTitle">🎁 景品分配中… 🎁</div>
+    <div class="rouletteTitle" id="rouletteTitle">🎁 合計 0個 を分配中… 🎁</div>
 
     <div class="slotsContainer">
         <div class="slotCard">
@@ -365,23 +432,23 @@
     </div>
 
     <div id="rouletteResultText"></div>
-    <div id="rouletteHint" class="retryHint">タップして確定</div>
+    <div id="rouletteHint" class="retryHint">Enterキーかタップで確定</div>
 </div>
 
 <div id="flash"></div>
 
 
 <script>
-
 /* =========================================================
- * テストモード設定
- * null      : 本番モード（プレイヤーの実力通り判定）
- * "fail"    : 残念（景品なし）
- * "good"    : 1個獲得
- * "great"   : 3個獲得
- * "perfect" : 11個獲得
+ * ⚙️ テストモード設定
+ * ---------------------------------------------------------
+ * 0 : 本番モード（プレイヤーの実力通り判定）
+ * 1 : 失敗（0個獲得） (12.45秒)
+ * 2 : いいね（1個獲得・暗転なし） (11.35秒)
+ * 3 : GREAT（3個獲得・11.1一致なら割れ / 11.のみなら一括表示）
+ * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
  * ========================================================= */
-const TEST_MODE = null;
+const TEST_MODE = 3;
 
 
 const TARGET_TIME = 11.11;
@@ -392,8 +459,7 @@ const RANGE_GREAT   = 0.10;
 const RANGE_GOOD    = 0.50;
 
 const DARK_TIME = 800;
-const DIGIT_INTERVAL = 700;
-const LAST_DIGIT_PAUSE = 1500;
+const DIGIT_INTERVAL = 900;
 
 /* ゲーム状態 */
 let running = false;
@@ -403,8 +469,9 @@ let finalTime = 0;
 let displayTimeStr = "";
 
 let showingResult = false;
-let earnedCount = 0; // 獲得合計数（1, 3, 11）
-let finalAllocation = [0, 0, 0]; // 確定した分配数
+let canAdvanceFromResult = false;
+let earnedCount = 0;
+let finalAllocation = [0, 0, 0];
 
 let rouletteSpinning = false;
 let rouletteReadyToClose = false;
@@ -416,6 +483,11 @@ const timer = document.getElementById("timer");
 const message = document.getElementById("message");
 const startButton = document.getElementById("startButton");
 const reward = document.getElementById("reward");
+
+const crackCanvas = document.getElementById("crackCanvas");
+const ctx = crackCanvas.getContext("2d");
+
+const cutinOverlay = document.getElementById("cutinOverlay");
 
 const effect = document.getElementById("effect");
 const resultDigits = document.getElementById("resultDigits");
@@ -434,8 +506,16 @@ const rouletteHint = document.getElementById("rouletteHint");
 const flash = document.getElementById("flash");
 
 
-/* イベント登録 */
+// Canvasサイズ調整
+function resizeCanvas() {
+    crackCanvas.width = window.innerWidth;
+    crackCanvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
+
+/* イベント登録 */
 startButton.addEventListener("click", () => {
     if (!running) {
         startGame();
@@ -444,29 +524,56 @@ startButton.addEventListener("click", () => {
     }
 });
 
-/* タイム結果画面のクリック */
-effect.addEventListener("click", () => {
-    if (showingResult) {
-        effect.classList.remove("dark");
-        showingResult = false;
-        startRoulette();
+/* キーボード（Enter / Space）対応 */
+document.addEventListener("keydown", (e) => {
+    if (e.code === "Enter" || e.code === "Space") {
+        if (document.activeElement) {
+            document.activeElement.blur();
+        }
+
+        if (showingResult || rouletteOverlay.classList.contains("show")) {
+            e.preventDefault();
+        }
+
+        if (showingResult && canAdvanceFromResult) {
+            handleResultAdvance();
+        } else if (rouletteOverlay.classList.contains("show")) {
+            handleRouletteAction();
+        }
     }
 });
+
+/* タイム結果画面のクリック */
+effect.addEventListener("click", () => {
+    if (showingResult && canAdvanceFromResult) {
+        handleResultAdvance();
+    }
+});
+
+function handleResultAdvance() {
+    effect.classList.remove("dark");
+    showingResult = false;
+    canAdvanceFromResult = false;
+    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
+    startRoulette();
+}
 
 /* ルーレット画面のクリック */
 rouletteOverlay.addEventListener("click", () => {
+    handleRouletteAction();
+});
+
+function handleRouletteAction() {
     if (rouletteSpinning) {
-        // スピン中にタップされたら即時確定
         stopRoulette();
     } else if (rouletteReadyToClose) {
-        // 確定後にタップされたら閉じて最初に戻る
         closeRouletteAndReset();
     }
-});
+}
 
 
 /* =========================
-   ゲーム開始
+   ゲーム開始＆停止
    ========================= */
 
 function startGame() {
@@ -474,7 +581,10 @@ function startGame() {
 
     running = true;
     showingResult = false;
+    canAdvanceFromResult = false;
     effect.classList.remove("dark");
+    cutinOverlay.classList.remove("show");
+    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
 
     startTime = performance.now();
 
@@ -486,11 +596,6 @@ function startGame() {
 
     timerId = requestAnimationFrame(updateTimer);
 }
-
-
-/* =========================
-   タイマー更新
-   ========================= */
 
 function updateTimer() {
     if (!running) return;
@@ -506,16 +611,13 @@ function updateTimer() {
     timerId = requestAnimationFrame(updateTimer);
 }
 
-
-/* =========================
-   ゲーム停止
-   ========================= */
-
 function stopGame() {
     if (!running) return;
 
     running = false;
     cancelAnimationFrame(timerId);
+
+    startButton.blur();
 
     finalTime = (performance.now() - startTime) / 1000;
     
@@ -526,54 +628,69 @@ function stopGame() {
 
     const diff = Math.abs(roundedTime - TARGET_TIME);
 
-    let mode = TEST_MODE;
+    let modeKey = TEST_MODE;
 
-    if (!mode) {
-        if (diff > RANGE_GOOD) mode = "fail";
-        else if (diff > RANGE_GREAT) mode = "good";
-        else if (diff > RANGE_PERFECT) mode = "great";
-        else mode = "perfect";
+    if (modeKey === 0) {
+        if (diff > RANGE_GOOD) modeKey = 1;
+        else if (diff > RANGE_GREAT) modeKey = 2;
+        else if (diff > RANGE_PERFECT) modeKey = 3;
+        else modeKey = 4;
     }
 
-    if (TEST_MODE) {
-        if (mode === "perfect") displayTimeStr = "11.11";
-        else if (mode === "great") displayTimeStr = "11.08";
-        else if (mode === "good") displayTimeStr = "11.35";
+    if (TEST_MODE !== 0) {
+        if (modeKey === 4) displayTimeStr = "11.11";
+        else if (modeKey === 3) displayTimeStr = "11.13";
+        else if (modeKey === 2) displayTimeStr = "11.35";
         else displayTimeStr = "12.45";
     } else {
         displayTimeStr = formattedString;
     }
 
-    /* 獲得数の設定 */
-    if (mode === "perfect") earnedCount = 11;
-    else if (mode === "great") earnedCount = 3;
-    else if (mode === "good") earnedCount = 1;
+    if (modeKey === 4) earnedCount = 11;
+    else if (modeKey === 3) earnedCount = 3;
+    else if (modeKey === 2) earnedCount = 1;
     else earnedCount = 0;
 
 
-    /* １．0.5秒以上のズレ（獲得なし・失敗） */
-    if (mode === "fail") {
+    /* 1 (失敗)：暗転なし・メッセージ表示後初期状態へ */
+    if (modeKey === 1) {
         timer.textContent = displayTimeStr;
         message.textContent = "残念。。また挑戦してね！";
-        reward.textContent = "";
+
+        setTimeout(() => {
+            resetToInitialState();
+        }, 2000);
     }
 
-    /* ２．0.1秒〜0.5秒のズレ（1個獲得 -> ルーレットへ） */
-    else if (mode === "good") {
+    /* 2 (1個獲得)：暗転なし・表画面から直接ルーレットへ */
+    else if (modeKey === 2) {
         timer.textContent = displayTimeStr;
         message.textContent = "いいねまあ111年後に出直してきなよ";
-        reward.textContent = "🎁 1個獲得！ (タップで分配ルーレットへ)";
+        reward.textContent = "🎁 1個獲得！ (Enterかタップで分配へ)";
         
-        // 画面タップでルーレット起動できるように少し待ってから自動起動も可
-        setTimeout(() => {
+        const clickToGood = () => {
+            document.removeEventListener("click", clickToGood);
+            document.removeEventListener("keydown", keyToGood);
             startRoulette();
-        }, 1200);
+        };
+        const keyToGood = (e) => {
+            if (e.code === "Enter" || e.code === "Space") {
+                document.removeEventListener("click", clickToGood);
+                document.removeEventListener("keydown", keyToGood);
+                startRoulette();
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener("click", clickToGood);
+            document.addEventListener("keydown", keyToGood);
+        }, 300);
     }
 
-    /* ３ / ４．暗転演出へ移行（3個 または 11個獲得） */
+    /* 3 (GREAT) / 4 (PERFECT)：暗転演出へ */
     else {
         timer.textContent = "？？？";
-        showResult(displayTimeStr, mode);
+        let modeName = (modeKey === 4) ? "perfect" : "great";
+        showResult(displayTimeStr, modeName);
     }
 }
 
@@ -584,17 +701,18 @@ function stopGame() {
 
 function showResult(displayString, result) {
     showingResult = true;
+    canAdvanceFromResult = false;
     playResultEffect(displayString, result);
 }
 
 function playResultEffect(displayString, result) {
     effect.className = "";
     resultDigits.className = "";
-    resultType.className = "";
-    resultReward.className = "";
+    resultType.textContent = "";
+    resultReward.textContent = "";
     retryHint.classList.remove("show");
 
-    resultDigits.textContent = "";
+    resultDigits.innerHTML = "";
     resultType.textContent = "";
     resultReward.textContent = "";
 
@@ -609,29 +727,117 @@ function playResultEffect(displayString, result) {
     }, DARK_TIME + 50);
 }
 
+
+/* =========================
+   数字カウントアップ ＆ 演出制御
+   ========================= */
+
+function setDigitsHTML(str) {
+    resultDigits.innerHTML = "";
+    for (let i = 0; i < str.length; i++) {
+        const span = document.createElement("span");
+        span.className = "digitChar";
+        span.id = `digit_${i}`;
+        span.textContent = str[i];
+        resultDigits.appendChild(span);
+    }
+}
+
+function triggerCutin(callback) {
+    cutinOverlay.classList.remove("show");
+    void cutinOverlay.offsetWidth;
+    cutinOverlay.classList.add("show");
+
+    setTimeout(() => {
+        cutinOverlay.classList.remove("show");
+        if (callback) callback();
+    }, 2000); // 激熱カットインを約2秒間しっかり表示
+}
+
 function showDigits(displayString, result) {
-    resultDigits.textContent = "";
+    resultDigits.innerHTML = "";
+
+    // モード4 (PERFECT) 11.12ハズレ ➔ 画面割れ ➔ 激熱カットイン(2秒) ➔ 押し上げ昇格演出！
+    if (result === "perfect") {
+        let fakeStr = "11.12";
+        let index = 0;
+
+        function stepFake() {
+            index++;
+            setDigitsHTML(fakeStr.substring(0, index));
+
+            if (index < fakeStr.length) {
+                setTimeout(stepFake, DIGIT_INTERVAL);
+            } else {
+                // 「11.12」で少し溜めてから画面割れ
+                setTimeout(() => {
+                    playGlassCrashEffect(() => {
+                        // 画面割れの直後に金文字「激熱」カットイン(2秒)！
+                        triggerCutin(() => {
+                            // カットイン後、2が吹き飛び1が押し上がる
+                            const lastChar = document.getElementById("digit_4");
+                            if (lastChar) {
+                                lastChar.classList.add("popOut");
+                            }
+
+                            setTimeout(() => {
+                                setDigitsHTML("11.11");
+                                const newLastChar = document.getElementById("digit_4");
+                                if (newLastChar) {
+                                    newLastChar.classList.add("pushUp");
+                                }
+
+                                setTimeout(() => {
+                                    showJudgement(result);
+                                }, 1200);
+                            }, 500);
+                        });
+                    });
+                }, 1200);
+            }
+        }
+        stepFake();
+        return;
+    }
+
+    // モード3 (GREAT) の処理
+    const isMatchedTo11_1 = displayString.startsWith("11.1");
     let index = 0;
 
     function step() {
-        if (index >= displayString.length) {
-            if (result === "perfect") {
-                resultDigits.classList.add("perfectDigits");
-            }
+        index++;
+
+        if (result === "great" && !isMatchedTo11_1 && index === 3) {
+            setDigitsHTML(displayString.substring(0, 3));
             setTimeout(() => {
-                showJudgement(result);
-            }, 500);
+                setDigitsHTML(displayString);
+                setTimeout(() => {
+                    showJudgement(result);
+                }, 600);
+            }, 1000);
             return;
         }
 
-        index++;
-        resultDigits.textContent = displayString.substring(0, index);
+        setDigitsHTML(displayString.substring(0, index));
+
+        if (result === "great" && isMatchedTo11_1 && index === 4) {
+            setTimeout(() => {
+                playGlassCrashEffect(() => {
+                    setDigitsHTML(displayString);
+                    setTimeout(() => {
+                        showJudgement(result);
+                    }, 600);
+                });
+            }, 800);
+            return;
+        }
 
         if (index < displayString.length) {
-            const nextDelay = (index === displayString.length - 1) ? LAST_DIGIT_PAUSE : DIGIT_INTERVAL;
-            setTimeout(step, nextDelay);
+            setTimeout(step, DIGIT_INTERVAL);
         } else {
-            step();
+            setTimeout(() => {
+                showJudgement(result);
+            }, 600);
         }
     }
 
@@ -645,30 +851,82 @@ function showJudgement(result) {
         resultReward.textContent = "🌈 11個獲得！";
         resultReward.classList.add("show");
 
-        flash.classList.remove("active");
-        void flash.offsetWidth;
-        flash.classList.add("active");
-
-        effect.classList.remove("shake");
-        void effect.offsetWidth;
-        effect.classList.add("shake");
-
         createParticles(120);
+
+        setTimeout(() => {
+            retryHint.classList.add("show");
+            canAdvanceFromResult = true;
+        }, 800);
+
     } else if (result === "great") {
         resultType.textContent = "11番目くらいには最高";
         resultType.classList.add("great");
         resultReward.textContent = "✨ 3個獲得！";
         resultReward.classList.add("show");
-    }
 
-    setTimeout(() => {
-        retryHint.classList.add("show");
-    }, 600);
+        setTimeout(() => {
+            retryHint.classList.add("show");
+            canAdvanceFromResult = true;
+        }, 600);
+    }
 }
 
 
 /* =========================
-   ランダム分配アルゴリズム
+   💥 ひび割れ＆ロングフリーズ演出
+   ========================= */
+
+function playGlassCrashEffect(onComplete) {
+    flash.classList.remove("active");
+    void flash.offsetWidth;
+    flash.classList.add("active");
+
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+
+    let lines = [];
+    const mainBranches = 16;
+    for (let i = 0; i < mainBranches; i++) {
+        let angle = (Math.PI * 2 / mainBranches) * i + (Math.random() * 0.4 - 0.2);
+        let currX = cx;
+        let currY = cy;
+        let points = [{x: currX, y: currY}];
+        let steps = 8 + Math.floor(Math.random() * 4);
+
+        for (let j = 0; j < steps; j++) {
+            let dist = (Math.min(window.innerWidth, window.innerHeight) / steps) * (j + 1);
+            angle += (Math.random() - 0.5) * 0.5;
+            currX = cx + Math.cos(angle) * dist;
+            currY = cy + Math.sin(angle) * dist;
+            points.push({x: currX, y: currY});
+        }
+        lines.push(points);
+    }
+
+    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = "#00ffff";
+    ctx.shadowBlur = 14;
+
+    lines.forEach(pts => {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x, pts[i].y);
+        }
+        ctx.stroke();
+    });
+
+    setTimeout(() => {
+        ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
+        onComplete();
+    }, 2000);
+}
+
+
+/* =========================
+   ランダム分配 & 一斉スロット
    ========================= */
 
 function allocateItems(total) {
@@ -679,11 +937,6 @@ function allocateItems(total) {
     }
     return res;
 }
-
-
-/* =========================
-   景品分配ルーレット演出
-   ========================= */
 
 function startRoulette() {
     rouletteOverlay.classList.add("show");
@@ -698,25 +951,16 @@ function startRoulette() {
     });
 
     rouletteResultText.textContent = "";
-    rouletteHint.textContent = "タップしてストップ！";
+    rouletteHint.textContent = "Enterキーかタップでストップ！";
     rouletteHint.classList.add("show");
 
-    // 事前に今回のランダム分配結果を計算
     finalAllocation = allocateItems(earnedCount);
 
-    // ドラム高速回転（ランダムな数値をパラパラ表示）
     rouletteTimer = setInterval(() => {
         slot0.textContent = Math.floor(Math.random() * (earnedCount + 1));
         slot1.textContent = Math.floor(Math.random() * (earnedCount + 1));
         slot2.textContent = Math.floor(Math.random() * (earnedCount + 1));
     }, 40);
-
-    // 2.2秒後に自動停止
-    setTimeout(() => {
-        if (rouletteSpinning) {
-            stopRoulette();
-        }
-    }, 2200);
 }
 
 function stopRoulette() {
@@ -725,14 +969,12 @@ function stopRoulette() {
     rouletteSpinning = false;
     clearInterval(rouletteTimer);
 
-    // 確定結果を画面にセット
     slot0.textContent = finalAllocation[0];
     slot1.textContent = finalAllocation[1];
     slot2.textContent = finalAllocation[2];
 
     [slot0, slot1, slot2].forEach(s => s.classList.add("decided"));
 
-    // テキスト形式のサマリー作成
     const names = ["ポッキー", "プリッツ", "トッポ"];
     let summaryArr = [];
     for (let i = 0; i < 3; i++) {
@@ -741,43 +983,43 @@ function stopRoulette() {
         }
     }
 
-    rouletteResultText.textContent = "🎉 " + summaryArr.join("、") + " 獲得！";
-    rouletteHint.textContent = "タップして確定";
+    const rewardSummary = summaryArr.join("、");
+    rouletteResultText.textContent = "🎉 " + rewardSummary + " 獲得！";
+    rouletteHint.textContent = "Enterキーかタップでタイトルに戻る";
 
-    // フラッシュ演出
     flash.classList.remove("active");
     void flash.offsetWidth;
     flash.classList.add("active");
 
     setTimeout(() => {
         rouletteReadyToClose = true;
-    }, 300);
+    }, 400);
 }
 
 function closeRouletteAndReset() {
     rouletteOverlay.classList.remove("show");
     rouletteReadyToClose = false;
+    resetToInitialState();
+}
 
-    // テキストサマリー作成
-    const names = ["ポッキー", "プリッツ", "トッポ"];
-    let summaryArr = [];
-    for (let i = 0; i < 3; i++) {
-        if (finalAllocation[i] > 0) {
-            summaryArr.push(`${names[i]} ${finalAllocation[i]}個`);
-        }
+/* ゲーム完全初期化 */
+function resetToInitialState() {
+    running = false;
+    showingResult = false;
+    canAdvanceFromResult = false;
+
+    timer.textContent = "0.00";
+    message.textContent = "STARTを押して11.11秒を目指せ！";
+    reward.textContent = "";
+    startButton.textContent = "START";
+
+    if (document.activeElement) {
+        document.activeElement.blur();
     }
-
-    // メイン画面に獲得内訳を記載
-    timer.textContent = displayTimeStr;
-    message.textContent = "もう一度チャレンジ！";
-    reward.textContent = `🎁 前回獲得：${summaryArr.join(" / ")}`;
 }
 
 
-/* =========================
-   パーティクル生成
-   ========================= */
-
+/* パーティクル */
 function createParticles(count) {
     for (let i = 0; i < count; i++) {
         const particle = document.createElement("div");
