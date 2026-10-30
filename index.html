@@ -14,7 +14,7 @@
         overflow: hidden;
         background: white;
         color: #222;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: sans-serif;
         user-select: none;
     }
 
@@ -56,13 +56,6 @@
         cursor: pointer;
         position: relative;
         z-index: 100;
-        border-radius: 8px;
-        border: 1px solid #ccc;
-        background: #f0f0f0;
-    }
-
-    button:hover {
-        background: #e0e0e0;
     }
 
     #reward {
@@ -394,7 +387,7 @@
     <div id="resultDigits"></div>
     <div id="resultType"></div>
     <div id="resultReward"></div>
-    <div id="retryHint" class="retryHint">Enterキーかタップで分配へ</div>
+    <div id="retryHint" class="retryHint">Enterキーかタップで次へ</div>
 </div>
 
 <!-- 景品分配ルーレット画面 -->
@@ -429,10 +422,10 @@
  * 0 : 本番モード（プレイヤーの実力通り判定）
  * 1 : 失敗（0個獲得） (12.45秒)
  * 2 : いいね（1個獲得・暗転なし） (11.35秒)
- * 3 : GREAT（3個獲得）
- * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱 ➔ 押し上げ昇格）
+ * 3 : GREAT（3個獲得・11.1一致なら割れ / 11.のみなら一括表示）
+ * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
  * ========================================================= */
-const TEST_MODE = 0;
+const TEST_MODE = 4;
 
 const TARGET_TIME = 11.11;
 const VISIBLE_TIME = 3.33;
@@ -444,16 +437,8 @@ const RANGE_GOOD    = 0.50;
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
 
-/* ゲーム状態フラグ */
+/* ゲーム状態 */
 let running = false;
-let showingResult = false;
-let canAdvanceFromResult = false;
-
-let rouletteSpinning = false;
-let rouletteReadyToClose = false;
-
-let gameState = "IDLE"; // "IDLE", "RUNNING", "RESULT_SHOWING", "ROULETTE"
-
 let startTime = 0;
 let timerId = null;
 let finalTime = 0;
@@ -461,13 +446,23 @@ let displayTimeStr = "";
 let lastStartTime = 0;
 
 let effectTimeouts = []; 
+
+let showingResult = false;
+let canAdvanceFromResult = false;
+let showingFailure = false;  // 失敗画面状態管理フラグ
+let showingGood = false;     // いいね（1個獲得）画面状態管理フラグ
+
 let earnedCount = 0;
 let finalAllocation = [0, 0, 0];
 
+let rouletteSpinning = false;
+let rouletteReadyToClose = false;
 let rouletteTimer = null;
-let lastActionTime = 0;
+let lastRouletteOpenTime = 0;
+let lastResetTime = 0;
 
 /* HTML要素 */
+const gameContainer = document.getElementById("gameContainer");
 const timer = document.getElementById("timer");
 const message = document.getElementById("message");
 const startButton = document.getElementById("startButton");
@@ -512,56 +507,33 @@ function clearAllTimeouts() {
     effectTimeouts = [];
 }
 
-/* タイトル・初期状態へ確実に戻す処理 */
-function resetToTitleScreen() {
-    clearAllTimeouts();
-
-    running = false;
-    showingResult = false;
-    canAdvanceFromResult = false;
-    rouletteSpinning = false;
-    rouletteReadyToClose = false;
-    gameState = "IDLE";
-
-    if (timerId !== null) {
-        cancelAnimationFrame(timerId);
-        timerId = null;
-    }
-    if (rouletteTimer !== null) {
-        clearInterval(rouletteTimer);
-        rouletteTimer = null;
-    }
-
-    // オーバーレイ消去
-    effect.classList.remove("dark");
-    rouletteOverlay.classList.remove("show");
-    cutinOverlay.classList.remove("show");
-    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
-
-    // タイトル画面のテキストと表示をセット
-    timer.textContent = "0.00";
-    message.textContent = "STARTを押して11.11秒を目指せ！";
-    reward.textContent = "";
-    startButton.textContent = "START";
-
-    if (document.activeElement) {
-        document.activeElement.blur();
-    }
-}
-
 startButton.addEventListener("click", () => {
-    if (gameState === "IDLE") {
+    if (!running && !showingFailure && !showingGood) {
+        if (performance.now() - lastResetTime < 300) return;
         startGame();
-    } else if (gameState === "RUNNING") {
-        if (performance.now() - lastStartTime >= 500) {
+    } else if (running) {
+        if (performance.now() - lastStartTime >= 5000) {
             stopGame();
         }
     }
 });
 
-/* 統一キー入力 & クリックハンドラ */
+/* 全体クリック（タップ）対応 */
+document.addEventListener("click", (e) => {
+    // ボタン自体のクリックは別処理
+    if (e.target === startButton) return;
+
+    if (showingFailure) {
+        resetToInitialState();
+    } else if (showingGood) {
+        showingGood = false;
+        startRoulette();
+    }
+});
+
+/* キーボード（Enter / Space）対応 */
 document.addEventListener("keydown", (e) => {
-    if (e.repeat) return; // 押しっぱなしによる連続誤動作を防止
+    if (e.repeat) return;
 
     if (e.code === "Enter" || e.code === "Space" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -570,56 +542,79 @@ document.addEventListener("keydown", (e) => {
             document.activeElement.blur();
         }
 
-        handleUniversalAction();
+        if (running) {
+            if (performance.now() - lastStartTime >= 5000) {
+                stopGame();
+            }
+        }
+        else if (showingFailure) {
+            resetToInitialState();
+        }
+        else if (showingGood) {
+            showingGood = false;
+            startRoulette();
+        }
+        else if (showingResult && canAdvanceFromResult) {
+            handleResultAdvance();
+        }
+        else if (rouletteOverlay.classList.contains("show")) {
+            handleRouletteAction();
+        }
+        else if (!running && !showingResult && !rouletteOverlay.classList.contains("show")) {
+            if (performance.now() - lastResetTime < 300) return;
+            startGame();
+        }
     }
 });
 
 effect.addEventListener("click", () => {
-    if (gameState === "RESULT_SHOWING" && canAdvanceFromResult) {
-        handleUniversalAction();
+    if (showingResult && canAdvanceFromResult) {
+        handleResultAdvance();
     }
 });
+
+function handleResultAdvance() {
+    clearAllTimeouts();
+    effect.classList.remove("dark");
+    showingResult = false;
+    canAdvanceFromResult = false;
+    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
+    startRoulette();
+}
 
 rouletteOverlay.addEventListener("click", () => {
-    if (gameState === "ROULETTE") {
-        handleUniversalAction();
-    }
+    handleRouletteAction();
 });
 
-function handleUniversalAction() {
-    const now = performance.now();
-    if (now - lastActionTime < 300) return; // デバウンス処理
-    lastActionTime = now;
+function handleRouletteAction() {
+    if (performance.now() - lastRouletteOpenTime < 400) return;
 
-    if (gameState === "IDLE") {
-        startGame();
-    }
-    else if (gameState === "RUNNING") {
-        if (now - lastStartTime >= 500) {
-            stopGame();
-        }
-    }
-    else if (gameState === "RESULT_SHOWING") {
-        if (canAdvanceFromResult) {
-            startRoulette();
-        }
-    }
-    else if (gameState === "ROULETTE") {
-        if (rouletteSpinning) {
-            stopRoulette();
-        } else if (rouletteReadyToClose) {
-            resetToTitleScreen();
-        }
+    if (rouletteSpinning) {
+        stopRoulette();
+    } else if (rouletteReadyToClose) {
+        closeRouletteAndReset();
     }
 }
 
 function startGame() {
-    if (running || gameState === "RUNNING") return;
+    if (running) return;
 
-    resetToTitleScreen();
+    clearAllTimeouts();
+
+    if (timerId !== null) {
+        cancelAnimationFrame(timerId);
+        timerId = null;
+    }
 
     running = true;
-    gameState = "RUNNING";
+    showingResult = false;
+    canAdvanceFromResult = false;
+    showingFailure = false;
+    showingGood = false;
+
+    effect.classList.remove("dark");
+    cutinOverlay.classList.remove("show");
+    ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
 
     startTime = performance.now();
     lastStartTime = startTime;
@@ -658,7 +653,12 @@ function stopGame() {
         timerId = null;
     }
 
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+
     finalTime = (performance.now() - startTime) / 1000;
+    
     const formattedString = finalTime.toFixed(2);
     const roundedTime = parseFloat(formattedString);
 
@@ -689,24 +689,22 @@ function stopGame() {
     else if (modeKey === 2) earnedCount = 1;
     else earnedCount = 0;
 
-    /* 1 (失敗)：タイトル復帰準備 */
+    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.00）へ確実に復帰 */
     if (modeKey === 1) {
+        showingFailure = true;
         timer.textContent = displayTimeStr;
-        message.textContent = "残念。。また挑戦してね！ ";
-        gameState = "ROULETTE"; 
-        rouletteReadyToClose = true; 
+        message.textContent = "残念。。また挑戦してね！ (Enterかタップでタイトルへ)";
     }
 
-    /* 2 (1個獲得)：ルーレット遷移準備 */
+    /* 2 (1個獲得)：フラグを立ててEnterかタップでルーレットへ */
     else if (modeKey === 2) {
+        showingGood = true;
         timer.textContent = displayTimeStr;
         message.textContent = "いいねまあ111年後に出直してきなよ";
-        reward.textContent = "🎁 1個獲得！ ";
-        gameState = "RESULT_SHOWING";
-        canAdvanceFromResult = true;
+        reward.textContent = "🎁 1個獲得！ (Enterかタップで分配へ)";
     }
 
-    /* 3 (GREAT) / 4 (PERFECT)：暗転演出へ */
+    /* 3 (GREAT) / 4 (PERFECT)：演出へ */
     else {
         timer.textContent = "？？？";
         let modeName = (modeKey === 4) ? "perfect" : "great";
@@ -717,7 +715,6 @@ function stopGame() {
 function showResult(displayString, result) {
     showingResult = true;
     canAdvanceFromResult = false;
-    gameState = "RESULT_SHOWING";
     playResultEffect(displayString, result);
 }
 
@@ -729,6 +726,8 @@ function playResultEffect(displayString, result) {
     retryHint.classList.remove("show");
 
     resultDigits.innerHTML = "";
+    resultType.textContent = "";
+    resultReward.textContent = "";
 
     document.querySelectorAll(".particle").forEach(p => p.remove());
 
@@ -933,14 +932,11 @@ function allocateItems(total) {
 }
 
 function startRoulette() {
-    effect.classList.remove("dark");
-    showingResult = false;
-    canAdvanceFromResult = false;
-
-    gameState = "ROULETTE";
     rouletteOverlay.classList.add("show");
     rouletteSpinning = true;
     rouletteReadyToClose = false;
+
+    lastRouletteOpenTime = performance.now();
 
     rouletteTitle.textContent = `🎁 合計 ${earnedCount}個 を分配中… 🎁`;
 
@@ -999,7 +995,41 @@ function stopRoulette() {
 
     addTimeout(() => {
         rouletteReadyToClose = true;
+        lastRouletteOpenTime = performance.now();
     }, 400);
+}
+
+function closeRouletteAndReset() {
+    rouletteOverlay.classList.remove("show");
+    rouletteReadyToClose = false;
+    resetToInitialState();
+}
+
+/* タイトル画面（0.00）への完全初期化 */
+function resetToInitialState() {
+    running = false;
+    showingResult = false;
+    canAdvanceFromResult = false;
+    showingFailure = false;
+    showingGood = false;
+
+    lastResetTime = performance.now();
+
+    clearAllTimeouts();
+
+    if (timerId !== null) {
+        cancelAnimationFrame(timerId);
+        timerId = null;
+    }
+
+    timer.textContent = "0.00";
+    message.textContent = "STARTを押して11.11秒を目指せ！";
+    reward.textContent = "";
+    startButton.textContent = "START";
+
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
 }
 
 function createParticles(count) {
@@ -1031,8 +1061,6 @@ function createParticles(count) {
     }
 }
 
-// 初期化実行
-resetToTitleScreen();
 </script>
 </body>
 </html>
