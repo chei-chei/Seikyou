@@ -38,6 +38,17 @@
         margin-bottom: 20px;
     }
 
+    /* 「秒」長押し用のスタイル */
+    .secret-trigger {
+        cursor: pointer;
+        display: inline-block;
+        transition: transform 0.2s, color 0.2s;
+    }
+    .secret-trigger:active {
+        transform: scale(1.2);
+        color: #ff3366;
+    }
+
     #timer {
         font-size: 70px;
         font-weight: bold;
@@ -56,6 +67,7 @@
         cursor: pointer;
         position: relative;
         z-index: 100;
+        outline: none;
     }
 
     #reward {
@@ -221,7 +233,9 @@
         font-weight: 900;
         font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
         background: linear-gradient(180deg, #ffffff 0%, #fff0a0 30%, #ffd700 60%, #b8860b 100%);
+        background-clip: text;
         -webkit-background-clip: text;
+        color: transparent;
         -webkit-text-fill-color: transparent;
         letter-spacing: 25px;
         filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 140, 0, 0.8));
@@ -237,14 +251,14 @@
         100% { transform: scale(0.7); opacity: 0; filter: blur(8px); }
     }
 
-    /* 景品分配ルーレット画面 */
+    /* 景品分配ルーレット画面（背景を不透明の完全な黒に変更） */
     #rouletteOverlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
-        background: rgba(0, 0, 0, 0.93);
+        background: #000000;
         display: none;
         align-items: center;
         justify-content: center;
@@ -353,13 +367,101 @@
         box-shadow: 0 0 8px white, 0 0 18px yellow;
         pointer-events: none;
     }
+
+    /* 管理用ページ（モーダル風画面） */
+    #adminPage {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #111;
+        color: #fff;
+        z-index: 20000;
+        display: none;
+        flex-direction: column;
+        box-sizing: border-box;
+        padding: 20px;
+        overflow-y: auto;
+    }
+
+    #adminPage.show {
+        display: flex;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid #444;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .admin-header h2 {
+        margin: 0;
+        color: #ffd700;
+    }
+
+    .admin-section {
+        background: #222;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .admin-section h3 {
+        margin-top: 0;
+        color: #00ffff;
+        border-bottom: 1px solid #444;
+        padding-bottom: 5px;
+    }
+
+    .admin-btn-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .admin-btn {
+        padding: 8px 16px;
+        font-size: 16px;
+        background: #333;
+        color: #fff;
+        border: 1px solid #666;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .admin-btn:hover {
+        background: #444;
+    }
+    .admin-btn.primary {
+        background: #0088ff;
+        border-color: #00aaff;
+    }
+
+    .history-list {
+        max-height: 200px;
+        overflow-y: auto;
+        background: #181818;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 14px;
+    }
+
+    .history-item {
+        border-bottom: 1px dashed #333;
+        padding: 4px 0;
+    }
 </style>
 </head>
 
 <body>
 
 <div id="gameContainer">
-    <h1>11.11秒チャレンジ</h1>
+    <h1>11.11<span id="secretTrigger" class="secret-trigger">秒</span>チャレンジ</h1>
 
     <div id="target">目標：11.11秒</div>
 
@@ -413,6 +515,41 @@
     <div id="rouletteHint" class="retryHint">Enterキーかタップで確定</div>
 </div>
 
+<!-- 管理用ページ -->
+<div id="adminPage">
+    <div class="admin-header">
+        <h2>⚙️ システム管理ページ</h2>
+        <button class="admin-btn" id="closeAdminBtn">ゲームに戻る</button>
+    </div>
+
+    <div class="admin-section">
+        <h3>🎰 ルーレット単体実行</h3>
+        <p>個数を指定してルーレットを実行します（結果はルーレット履歴に保存されます）。</p>
+        <div class="admin-btn-group">
+            <button class="admin-btn primary" id="adminSpin1Btn">1個で実行</button>
+            <button class="admin-btn primary" id="adminSpin3Btn">3個で実行</button>
+            <button class="admin-btn primary" id="adminSpin11Btn">11個で実行</button>
+        </div>
+    </div>
+
+    <div class="admin-section">
+        <h3>📜 獲得履歴</h3>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 280px;">
+                <h4>【ゲーム獲得履歴】</h4>
+                <div class="history-list" id="gameHistoryList">履歴はありません</div>
+            </div>
+            <div style="flex: 1; min-width: 280px;">
+                <h4>【単体ルーレット履歴】</h4>
+                <div class="history-list" id="adminHistoryList">履歴はありません</div>
+            </div>
+        </div>
+        <div style="margin-top: 15px;">
+            <button class="admin-btn" id="clearHistoryBtn" style="background: #900;">履歴クリア</button>
+        </div>
+    </div>
+</div>
+
 <div id="flash"></div>
 
 <script>
@@ -444,6 +581,7 @@ let timerId = null;
 let finalTime = 0;
 let displayTimeStr = "";
 let lastStartTime = 0;
+let lastStopTime = 0; // STOPボタン押下時のタイムスタンプ（誤発火防止用）
 
 let effectTimeouts = []; 
 
@@ -460,6 +598,8 @@ let rouletteReadyToClose = false;
 let rouletteTimer = null;
 let lastRouletteOpenTime = 0;
 let lastResetTime = 0;
+
+let currentSource = "game"; // "game" または "admin"
 
 /* HTML要素 */
 const gameContainer = document.getElementById("gameContainer");
@@ -489,6 +629,16 @@ const rouletteHint = document.getElementById("rouletteHint");
 
 const flash = document.getElementById("flash");
 
+const secretTrigger = document.getElementById("secretTrigger");
+const adminPage = document.getElementById("adminPage");
+const closeAdminBtn = document.getElementById("closeAdminBtn");
+const gameHistoryList = document.getElementById("gameHistoryList");
+const adminHistoryList = document.getElementById("adminHistoryList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+const adminSpin1Btn = document.getElementById("adminSpin1Btn");
+const adminSpin3Btn = document.getElementById("adminSpin3Btn");
+const adminSpin11Btn = document.getElementById("adminSpin11Btn");
+
 function resizeCanvas() {
     crackCanvas.width = window.innerWidth;
     crackCanvas.height = window.innerHeight;
@@ -507,7 +657,8 @@ function clearAllTimeouts() {
     effectTimeouts = [];
 }
 
-startButton.addEventListener("click", () => {
+startButton.addEventListener("click", (e) => {
+    e.stopPropagation(); // documentへのイベント伝播をブロック
     if (!running && !showingFailure && !showingGood) {
         if (performance.now() - lastResetTime < 300) return;
         startGame();
@@ -520,25 +671,27 @@ startButton.addEventListener("click", () => {
 
 /* 全体クリック（タップ）対応 */
 document.addEventListener("click", (e) => {
-    // ボタン自体のクリックは別処理
-    if (e.target === startButton) return;
+    if (e.target === startButton || adminPage.classList.contains("show")) return;
+    // STOPボタンを押した直後の画面タップによるスキップを防ぐ
+    if (performance.now() - lastStopTime < 300) return;
 
     if (showingFailure) {
         resetToInitialState();
     } else if (showingGood) {
         showingGood = false;
+        currentSource = "game";
         startRoulette();
     }
 });
 
 /* キーボード（Enter / Space）対応 */
 document.addEventListener("keydown", (e) => {
-    if (e.repeat) return;
+    if (e.repeat || adminPage.classList.contains("show")) return;
 
     if (e.code === "Enter" || e.code === "Space" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
 
-        if (document.activeElement) {
+        if (document.activeElement && document.activeElement.tagName === "BUTTON") {
             document.activeElement.blur();
         }
 
@@ -552,6 +705,7 @@ document.addEventListener("keydown", (e) => {
         }
         else if (showingGood) {
             showingGood = false;
+            currentSource = "game";
             startRoulette();
         }
         else if (showingResult && canAdvanceFromResult) {
@@ -579,6 +733,7 @@ function handleResultAdvance() {
     showingResult = false;
     canAdvanceFromResult = false;
     ctx.clearRect(0, 0, crackCanvas.width, crackCanvas.height);
+    currentSource = "game";
     startRoulette();
 }
 
@@ -648,6 +803,8 @@ function stopGame() {
     if (!running) return;
 
     running = false;
+    lastStopTime = performance.now(); // 停止時のタイムスタンプ保持
+
     if (timerId !== null) {
         cancelAnimationFrame(timerId);
         timerId = null;
@@ -689,7 +846,7 @@ function stopGame() {
     else if (modeKey === 2) earnedCount = 1;
     else earnedCount = 0;
 
-    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.00）へ確実に復帰 */
+    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.00）へ復帰 */
     if (modeKey === 1) {
         showingFailure = true;
         timer.textContent = displayTimeStr;
@@ -726,8 +883,6 @@ function playResultEffect(displayString, result) {
     retryHint.classList.remove("show");
 
     resultDigits.innerHTML = "";
-    resultType.textContent = "";
-    resultReward.textContent = "";
 
     document.querySelectorAll(".particle").forEach(p => p.remove());
 
@@ -922,11 +1077,22 @@ function playGlassCrashEffect(onComplete) {
     }, 2000);
 }
 
+/* 7:5:3の比率で景品をランダム分配するアルゴリズム */
 function allocateItems(total) {
     let res = [0, 0, 0];
+    // ポッキー:7, プリッツ:5, トッポ:3 (合計15)
+    const weights = [7, 5, 3];
+    const totalWeight = 15;
+
     for (let i = 0; i < total; i++) {
-        const r = Math.floor(Math.random() * 3);
-        res[r]++;
+        let r = Math.random() * totalWeight;
+        if (r < weights[0]) {
+            res[0]++; // ポッキー
+        } else if (r < weights[0] + weights[1]) {
+            res[1]++; // プリッツ
+        } else {
+            res[2]++; // トッポ
+        }
     }
     return res;
 }
@@ -987,7 +1153,10 @@ function stopRoulette() {
 
     const rewardSummary = summaryArr.join("、");
     rouletteResultText.textContent = "🎉 " + rewardSummary + " 獲得！";
-    rouletteHint.textContent = "Enterキーかタップでタイトルに戻る";
+    rouletteHint.textContent = currentSource === "admin" ? "Enterキーかタップで戻る" : "Enterキーかタップでタイトルに戻る";
+
+    // 履歴へ保存
+    saveHistory(currentSource, earnedCount, finalAllocation);
 
     flash.classList.remove("active");
     void flash.offsetWidth;
@@ -1002,7 +1171,12 @@ function stopRoulette() {
 function closeRouletteAndReset() {
     rouletteOverlay.classList.remove("show");
     rouletteReadyToClose = false;
-    resetToInitialState();
+    
+    if (currentSource === "admin") {
+        openAdminPage();
+    } else {
+        resetToInitialState();
+    }
 }
 
 /* タイトル画面（0.00）への完全初期化 */
@@ -1050,7 +1224,7 @@ function createParticles(count) {
 
         effect.appendChild(particle);
 
-        particle.animate([
+        const anim = particle.animate([
             { transform: 'translate(0, 0) scale(1)', opacity: 1 },
             { transform: `translate(${tx}px, ${ty}px) scale(0)`, opacity: 0 }
         ], {
@@ -1058,8 +1232,112 @@ function createParticles(count) {
             easing: 'cubic-bezier(0.1, 0.8, 0.3, 1)',
             fill: 'forwards'
         });
+
+        anim.finished.then(() => particle.remove()).catch(() => particle.remove());
     }
 }
+
+/* =========================================================
+ * 🔒 隠し管理ページ ＆ 履歴保存機能
+ * ========================================================= */
+let longPressTimer = null;
+
+function startLongPress(e) {
+    e.preventDefault();
+    longPressTimer = setTimeout(() => {
+        openAdminPage();
+    }, 3000); // 3秒長押し
+}
+
+function cancelLongPress() {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+}
+
+secretTrigger.addEventListener("mousedown", startLongPress);
+secretTrigger.addEventListener("mouseup", cancelLongPress);
+secretTrigger.addEventListener("mouseleave", cancelLongPress);
+
+secretTrigger.addEventListener("touchstart", startLongPress, { passive: false });
+secretTrigger.addEventListener("touchend", cancelLongPress);
+secretTrigger.addEventListener("touchcancel", cancelLongPress);
+
+function openAdminPage() {
+    resetToInitialState();
+    adminPage.classList.add("show");
+    updateHistoryUI();
+}
+
+closeAdminBtn.addEventListener("click", () => {
+    adminPage.classList.remove("show");
+});
+
+/* 単体ルーレット実行ボタン */
+function runAdminRoulette(count) {
+    earnedCount = count;
+    currentSource = "admin";
+    adminPage.classList.remove("show");
+    startRoulette();
+}
+
+adminSpin1Btn.addEventListener("click", () => runAdminRoulette(1));
+adminSpin3Btn.addEventListener("click", () => runAdminRoulette(3));
+adminSpin11Btn.addEventListener("click", () => runAdminRoulette(11));
+
+/* LocalStorage 履歴管理 */
+function getHistory() {
+    const data = localStorage.getItem("challenge1111_history");
+    return data ? JSON.parse(data) : { game: [], admin: [] };
+}
+
+function saveHistory(source, count, alloc) {
+    const history = getHistory();
+    const now = new Date();
+    const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const entry = {
+        time: timeStr,
+        count: count,
+        detail: `ポッキー:${alloc[0]} / プリッツ:${alloc[1]} / トッポ:${alloc[2]}`
+    };
+
+    if (source === "admin") {
+        history.admin.unshift(entry);
+    } else {
+        history.game.unshift(entry);
+    }
+
+    localStorage.setItem("challenge1111_history", JSON.stringify(history));
+}
+
+function updateHistoryUI() {
+    const history = getHistory();
+
+    if (history.game.length === 0) {
+        gameHistoryList.innerHTML = "履歴はありません";
+    } else {
+        gameHistoryList.innerHTML = history.game.map(item => 
+            `<div class="history-item">[${item.time}] 計${item.count}個 (${item.detail})</div>`
+        ).join("");
+    }
+
+    if (history.admin.length === 0) {
+        adminHistoryList.innerHTML = "履歴はありません";
+    } else {
+        adminHistoryList.innerHTML = history.admin.map(item => 
+            `<div class="history-item">[${item.time}] 計${item.count}個 (${item.detail})</div>`
+        ).join("");
+    }
+}
+
+clearHistoryBtn.addEventListener("click", () => {
+    if (confirm("すべての履歴をクリアしますか？")) {
+        localStorage.removeItem("challenge1111_history");
+        updateHistoryUI();
+    }
+});
 
 </script>
 </body>
