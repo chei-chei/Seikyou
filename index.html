@@ -585,7 +585,7 @@
         <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             <button class="admin-btn primary" id="saveConfigBtn">設定を保存</button>
             <button class="admin-btn" id="autoAdjustRatioBtn" style="background: #444;">分配率を100%に自動調整</button>
-            <span id="configMsg" style="color: #00ff00; font-weight: bold;"></span>
+            <span id="configMsg" style="font-weight: bold;"></span>
         </div>
     </div>
 
@@ -641,6 +641,17 @@ const VISIBLE_TIME = 3.33;
 
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
+
+/* デフォルト設定オブジェクト */
+const DEFAULT_CONFIG = {
+    rangePerfect: 0.01,
+    rangeGreat: 0.10,
+    rangeGood: 0.50,
+    slipRate: 0,
+    ratioPocky: 46.7,
+    ratioPretz: 33.3,
+    ratioToppo: 20.0
+};
 
 /* ゲーム状態 */
 let running = false;
@@ -729,7 +740,11 @@ window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function addTimeout(fn, delay) {
-    const t = setTimeout(fn, delay);
+    let t = null;
+    t = setTimeout(() => {
+        effectTimeouts = effectTimeouts.filter(id => id !== t);
+        fn();
+    }, delay);
     effectTimeouts.push(t);
     return t;
 }
@@ -764,6 +779,7 @@ document.addEventListener("click", (e) => {
     }
 });
 
+/* 画面状態（ステート）に依拠したキーボード（Enter/Space）制御（⑤対応） */
 document.addEventListener("keydown", (e) => {
     if (e.repeat || adminPage.classList.contains("show")) return;
 
@@ -774,27 +790,44 @@ document.addEventListener("keydown", (e) => {
             document.activeElement.blur();
         }
 
+        // 1. ルーレット画面が表示中の場合
+        if (rouletteOverlay.classList.contains("show")) {
+            handleRouletteAction();
+            return;
+        }
+
+        // 2. 結果演出画面（GREAT / PERFECT）が表示中の場合
+        if (showingResult) {
+            if (canAdvanceFromResult) {
+                handleResultAdvance();
+            }
+            return;
+        }
+
+        // 3. 失敗（0個）画面表示中の場合
+        if (showingFailure) {
+            resetToInitialState();
+            return;
+        }
+
+        // 4. いいね（1個）画面表示中の場合
+        if (showingGood) {
+            showingGood = false;
+            currentSource = "game";
+            startRoulette();
+            return;
+        }
+
+        // 5. ゲームプレイ中（タイマー稼働中）の場合
         if (running) {
             if (performance.now() - lastStartTime >= 5000) {
                 stopGame();
             }
+            return;
         }
-        else if (showingFailure) {
-            resetToInitialState();
-        }
-        else if (showingGood) {
-            showingGood = false;
-            currentSource = "game";
-            startRoulette();
-        }
-        else if (showingResult && canAdvanceFromResult) {
-            handleResultAdvance();
-        }
-        else if (rouletteOverlay.classList.contains("show")) {
-            handleRouletteAction();
-        }
-        else if (!running && !showingResult && !rouletteOverlay.classList.contains("show")) {
-            if (performance.now() - lastResetTime < 300) return;
+
+        // 6. タイトル・待機画面の場合
+        if (performance.now() - lastResetTime >= 300) {
             startGame();
         }
     }
@@ -831,7 +864,16 @@ function handleRouletteAction() {
 }
 
 function startGame() {
-    if (running) return;
+    if (
+        running ||
+        showingResult ||
+        showingFailure ||
+        showingGood ||
+        rouletteOverlay.classList.contains("show") ||
+        adminPage.classList.contains("show")
+    ) {
+        return;
+    }
 
     clearAllTimeouts();
 
@@ -878,37 +920,52 @@ function updateTimer() {
     }
 }
 
-/* 動的レンジ設定に追従し、設定値の間隔が狭くても破綻しない滑り偽装タイム生成 */
+/* 誤差(diff)からランク(4:PERFECT, 3:GREAT, 2:GOOD, 1:失敗)を判定する共通関数 */
+function getRankFromDiff(diff) {
+    const config = getConfig();
+    if (diff <= config.rangePerfect) return 4;
+    if (diff <= config.rangeGreat) return 3;
+    if (diff <= config.rangeGood) return 2;
+    return 1;
+}
+
+/* 離散値候補（0.01秒刻み）を列挙し、対象ランクに100%一致するタイムを確定抽出する関数 */
 function generateSlippedTime(targetRank, rawTime) {
     const config = getConfig();
     const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.8) : (Math.random() < 0.2);
 
-    let offset = 0;
+    let searchStart = 0;
+    let searchEnd = 0;
 
-    if (targetRank === 3) {
-        // GREAT領域（Perfect超 〜 Great以下）
-        const maxOffset = config.rangeGreat;
-        let minOffset = config.rangePerfect + 0.005;
-        if (minOffset >= maxOffset) {
-            minOffset = maxOffset * 0.5;
-        }
-        offset = minOffset + Math.random() * (maxOffset - minOffset);
-    } else if (targetRank === 2) {
-        // GOOD領域（Great超 〜 Good以下）
-        const maxOffset = config.rangeGood;
-        let minOffset = config.rangeGreat + 0.005;
-        if (minOffset >= maxOffset) {
-            minOffset = maxOffset * 0.5;
-        }
-        offset = minOffset + Math.random() * (maxOffset - minOffset);
-    } else if (targetRank === 1) {
-        // 失敗領域（Good超）
-        const minOffset = config.rangeGood + 0.005;
-        offset = minOffset + Math.random() * 0.30;
+    if (targetRank === 3) { // GREAT (範囲: Perfect超 〜 Great以下)
+        searchStart = Math.round((config.rangePerfect + 0.01) * 100);
+        searchEnd = Math.round(config.rangeGreat * 100);
+    } else if (targetRank === 2) { // GOOD (範囲: Great超 〜 Good以下)
+        searchStart = Math.round((config.rangeGreat + 0.01) * 100);
+        searchEnd = Math.round(config.rangeGood * 100);
+    } else if (targetRank === 1) { // 失敗 (範囲: Good超 〜 Good+0.5秒)
+        searchStart = Math.round((config.rangeGood + 0.01) * 100);
+        searchEnd = Math.round((config.rangeGood + 0.50) * 100);
     }
 
-    const calculatedTime = isLate ? (TARGET_TIME + offset) : (TARGET_TIME - offset);
-    return calculatedTime.toFixed(2);
+    const validCandidates = [];
+    for (let offsetCents = searchStart; offsetCents <= searchEnd; offsetCents++) {
+        const offset = offsetCents / 100;
+        const candidateVal = isLate ? (TARGET_TIME + offset) : (TARGET_TIME - offset);
+        const candidateTimeStr = candidateVal.toFixed(2);
+
+        const roundedDiff = Math.abs(parseFloat(candidateTimeStr) - TARGET_TIME);
+        if (getRankFromDiff(roundedDiff) === targetRank) {
+            validCandidates.push(candidateTimeStr);
+        }
+    }
+
+    if (validCandidates.length > 0) {
+        const randomIndex = Math.floor(Math.random() * validCandidates.length);
+        return validCandidates[randomIndex];
+    }
+
+    return null;
 }
 
 function stopGame() {
@@ -939,20 +996,22 @@ function stopGame() {
     let modeKey = TEST_MODE;
 
     if (modeKey === 0) {
-        if (diff > config.rangeGood) modeKey = 1;        // 0個（失敗）
-        else if (diff > config.rangeGreat) modeKey = 2;   // 1個（GOOD）
-        else if (diff > config.rangePerfect) modeKey = 3; // 3個（GREAT）
-        else modeKey = 4;                                 // 11個（PERFECT）
+        modeKey = getRankFromDiff(diff);
     }
 
-    // 右滑り（ランクダウン）判定
+    // 右滑り（ランクダウン）判定（アトミック降格制御）
     let displayTimeOverride = null;
 
     if (TEST_MODE === 0 && modeKey > 1) {
         const randVal = Math.random() * 100;
         if (randVal < config.slipRate) {
-            modeKey--; // 1ランク降格
-            displayTimeOverride = generateSlippedTime(modeKey, roundedTime);
+            const downgradedMode = modeKey - 1;
+            const slippedTime = generateSlippedTime(downgradedMode, roundedTime);
+
+            if (slippedTime !== null) {
+                modeKey = downgradedMode;
+                displayTimeOverride = slippedTime;
+            }
         }
     }
 
@@ -1003,7 +1062,6 @@ function playResultEffect(displayString, result) {
     effect.className = "";
     resultDigits.className = "";
     
-    // 演出用クラスおよびテキストの完全リセット
     resultType.className = "";
     resultType.textContent = "";
     
@@ -1037,9 +1095,16 @@ function setDigitsHTML(str) {
 }
 
 function triggerCutin(callback) {
+    const cutinText = cutinOverlay.querySelector(".cutinText");
+
     cutinOverlay.classList.remove("show");
-    void cutinOverlay.offsetWidth;
+
+    cutinText.style.animation = "none";
+    void cutinText.offsetWidth;
+
     cutinOverlay.classList.add("show");
+    cutinText.style.animation = "";
+    void cutinText.offsetWidth;
 
     addTimeout(() => {
         cutinOverlay.classList.remove("show");
@@ -1210,11 +1275,16 @@ function playGlassCrashEffect(onComplete) {
 function allocateItems(total) {
     let res = [0, 0, 0];
     const config = getConfig();
-    const weights = [config.ratioPocky, config.ratioPretz, config.ratioToppo];
-    const totalWeight = weights[0] + weights[1] + weights[2];
+    let weights = [config.ratioPocky, config.ratioPretz, config.ratioToppo];
+    let totalWeight = weights[0] + weights[1] + weights[2];
+
+    if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
+        weights = [DEFAULT_CONFIG.ratioPocky, DEFAULT_CONFIG.ratioPretz, DEFAULT_CONFIG.ratioToppo];
+        totalWeight = weights[0] + weights[1] + weights[2];
+    }
 
     for (let i = 0; i < total; i++) {
-        let r = Math.random() * (totalWeight > 0 ? totalWeight : 100);
+        let r = Math.random() * totalWeight;
         if (r < weights[0]) {
             res[0]++; 
         } else if (r < weights[0] + weights[1]) {
@@ -1307,12 +1377,16 @@ function closeRouletteAndReset() {
     }
 }
 
+/* 獲得数・分配数クリアを追加した resetToInitialState（②対応） */
 function resetToInitialState() {
     running = false;
     showingResult = false;
     canAdvanceFromResult = false;
     showingFailure = false;
     showingGood = false;
+
+    earnedCount = 0;
+    finalAllocation = [0, 0, 0];
 
     lastResetTime = performance.now();
 
@@ -1403,11 +1477,13 @@ closeAdminBtn.addEventListener("click", () => {
 });
 
 function runAdminRoulette(count) {
-    const cnt = parseInt(count, 10);
-    if (isNaN(cnt) || cnt <= 0) {
-        alert("有効な個数を入力してください。");
+    const cnt = Number(count);
+
+    if (!Number.isInteger(cnt) || cnt < 1 || cnt > 999) {
+        alert("個数は1〜999の整数で入力してください。");
         return;
     }
+
     earnedCount = cnt;
     currentSource = "admin";
     adminPage.classList.remove("show");
@@ -1419,22 +1495,60 @@ adminSpin3Btn.addEventListener("click", () => runAdminRoulette(3));
 adminSpin11Btn.addEventListener("click", () => runAdminRoulette(11));
 adminSpinCustomBtn.addEventListener("click", () => runAdminRoulette(customSpinCount.value));
 
-/* LocalStorage 履歴・設定管理 */
 function getConfig() {
-    const data = localStorage.getItem("challenge1111_config");
-    return data ? JSON.parse(data) : {
-        rangePerfect: 0.01,
-        rangeGreat: 0.10,
-        rangeGood: 0.50,
-        slipRate: 0, // デフォルトの初期設定は 0%
-        ratioPocky: 46.7,
-        ratioPretz: 33.3,
-        ratioToppo: 20.0
-    };
+    try {
+        const data = localStorage.getItem("challenge1111_config");
+        if (!data) return { ...DEFAULT_CONFIG };
+
+        const parsed = JSON.parse(data);
+
+        const isValid =
+            parsed !== null &&
+            typeof parsed === "object" &&
+            Number.isFinite(parsed.rangePerfect) &&
+            parsed.rangePerfect >= 0 &&
+            parsed.rangePerfect <= 5 &&
+            Number.isFinite(parsed.rangeGreat) &&
+            parsed.rangeGreat >= 0 &&
+            parsed.rangeGreat <= 5 &&
+            Number.isFinite(parsed.rangeGood) &&
+            parsed.rangeGood >= 0 &&
+            parsed.rangeGood <= 5 &&
+            parsed.rangePerfect < parsed.rangeGreat &&
+            parsed.rangeGreat < parsed.rangeGood &&
+            Number.isFinite(parsed.slipRate) &&
+            parsed.slipRate >= 0 &&
+            parsed.slipRate <= 100 &&
+            Number.isFinite(parsed.ratioPocky) &&
+            parsed.ratioPocky >= 0 &&
+            parsed.ratioPocky <= 100 &&
+            Number.isFinite(parsed.ratioPretz) &&
+            parsed.ratioPretz >= 0 &&
+            parsed.ratioPretz <= 100 &&
+            Number.isFinite(parsed.ratioToppo) &&
+            parsed.ratioToppo >= 0 &&
+            parsed.ratioToppo <= 100 &&
+            Math.abs(
+                parsed.ratioPocky +
+                parsed.ratioPretz +
+                parsed.ratioToppo - 100
+            ) <= 0.1;
+
+        return isValid ? parsed : { ...DEFAULT_CONFIG };
+    } catch (e) {
+        console.error("Failed to load config, fallback to default:", e);
+        return { ...DEFAULT_CONFIG };
+    }
 }
 
 function saveConfig(config) {
-    localStorage.setItem("challenge1111_config", JSON.stringify(config));
+    try {
+        localStorage.setItem("challenge1111_config", JSON.stringify(config));
+        return true;
+    } catch (e) {
+        console.error("Failed to save config:", e);
+        return false;
+    }
 }
 
 function loadConfigToUI() {
@@ -1450,11 +1564,27 @@ function loadConfigToUI() {
 }
 
 autoAdjustRatioBtn.addEventListener("click", () => {
-    const p = parseFloat(ratioPocky.value) || 0;
-    const pr = parseFloat(ratioPretz.value) || 0;
-    const t = parseFloat(ratioToppo.value) || 0;
-    const sum = p + pr + t;
+    const pStr = ratioPocky.value.trim();
+    const prStr = ratioPretz.value.trim();
+    const tStr = ratioToppo.value.trim();
 
+    const p = Number(pStr);
+    const pr = Number(prStr);
+    const t = Number(tStr);
+
+    if (
+        pStr === "" || prStr === "" || tStr === "" ||
+        !Number.isFinite(p) || p < 0 || p > 100 ||
+        !Number.isFinite(pr) || pr < 0 || pr > 100 ||
+        !Number.isFinite(t) || t < 0 || t > 100
+    ) {
+        ratioPocky.value = "46.7";
+        ratioPretz.value = "33.3";
+        ratioToppo.value = "20.0";
+        return;
+    }
+
+    const sum = p + pr + t;
     if (sum === 0) {
         ratioPocky.value = "46.7";
         ratioPretz.value = "33.3";
@@ -1466,23 +1596,63 @@ autoAdjustRatioBtn.addEventListener("click", () => {
     }
 });
 
+/* 判定レンジ上限完全チェックを追加した saveConfigBtn（①対応） */
 saveConfigBtn.addEventListener("click", () => {
-    const rPerf = parseFloat(rangePerfectInput.value) || 0;
-    const rGreat = parseFloat(rangeGreatInput.value) || 0;
-    const rGood = parseFloat(rangeGoodInput.value) || 0;
+    const rangeValues = [
+        rangePerfectInput.value,
+        rangeGreatInput.value,
+        rangeGoodInput.value
+    ];
 
-    if (rPerf >= rGreat || rGreat >= rGood) {
-        alert("判定レンジの大小関係が不正です。（PERFECT < GREAT < GOOD となるように設定してください）");
+    if (rangeValues.some(v => v.trim() === "" || !Number.isFinite(Number(v)))) {
+        alert("判定レンジには有効な数値を入力してください。");
         return;
     }
 
-    const p = parseFloat(ratioPocky.value) || 0;
-    const pr = parseFloat(ratioPretz.value) || 0;
-    const t = parseFloat(ratioToppo.value) || 0;
-    const sum = Math.round((p + pr + t) * 10) / 10;
+    const rPerf = Number(rangePerfectInput.value);
+    const rGreat = Number(rangeGreatInput.value);
+    const rGood = Number(rangeGoodInput.value);
 
+    if (
+        rPerf < 0 || rPerf > 5 ||
+        rGreat < 0 || rGreat > 5 ||
+        rGood < 0 || rGood > 5 ||
+        rPerf >= rGreat ||
+        rGreat >= rGood
+    ) {
+        alert("判定レンジの値が不正です。0以上5以下で、PERFECT < GREAT < GOOD となるように設定してください。");
+        return;
+    }
+
+    const pStr = ratioPocky.value.trim();
+    const prStr = ratioPretz.value.trim();
+    const tStr = ratioToppo.value.trim();
+
+    if (pStr === "" || prStr === "" || tStr === "") {
+        alert("景品分配率はすべての項目を入力してください。");
+        return;
+    }
+
+    const p = Number(pStr);
+    const pr = Number(prStr);
+    const t = Number(tStr);
+
+    const ratioValues = [p, pr, t];
+    if (ratioValues.some(v => !Number.isFinite(v) || v < 0 || v > 100)) {
+        alert("景品分配率はそれぞれ0〜100の数値で入力してください。");
+        return;
+    }
+
+    const sum = Math.round((p + pr + t) * 10) / 10;
     if (Math.abs(sum - 100) > 0.1) {
         alert(`景品分配率の合計が100%になりません（現在: ${sum}%）。数値を調整するか、「自動調整」ボタンを押してください。`);
+        return;
+    }
+
+    const slipStr = slipRateInput.value.trim();
+    const slip = Number(slipStr);
+    if (slipStr === "" || !Number.isFinite(slip) || slip < 0 || slip > 100) {
+        alert("タイマー滑り確率は0〜100の数値で入力してください。");
         return;
     }
 
@@ -1490,20 +1660,42 @@ saveConfigBtn.addEventListener("click", () => {
         rangePerfect: rPerf,
         rangeGreat: rGreat,
         rangeGood: rGood,
-        slipRate: Math.max(0, Math.min(100, parseFloat(slipRateInput.value) || 0)),
+        slipRate: slip,
         ratioPocky: p,
         ratioPretz: pr,
         ratioToppo: t
     };
 
-    saveConfig(config);
-    configMsg.textContent = "✓ 設定を保存しました！";
+    if (saveConfig(config)) {
+        configMsg.style.color = "#00ff00";
+        configMsg.textContent = "✓ 設定を保存しました！";
+    } else {
+        configMsg.style.color = "#ff3333";
+        configMsg.textContent = "✕ 保存に失敗しました。";
+    }
     setTimeout(() => { configMsg.textContent = ""; }, 2500);
 });
 
 function getHistory() {
-    const data = localStorage.getItem("challenge1111_history");
-    return data ? JSON.parse(data) : { game: [], admin: [] };
+    const defaultHistory = { game: [], admin: [] };
+    try {
+        const data = localStorage.getItem("challenge1111_history");
+        if (!data) return defaultHistory;
+
+        const parsed = JSON.parse(data);
+        if (
+            parsed !== null &&
+            typeof parsed === "object" &&
+            Array.isArray(parsed.game) &&
+            Array.isArray(parsed.admin)
+        ) {
+            return parsed;
+        }
+        return defaultHistory;
+    } catch (e) {
+        console.error("Failed to load history:", e);
+        return defaultHistory;
+    }
 }
 
 function saveHistory(source, count, alloc) {
@@ -1523,32 +1715,56 @@ function saveHistory(source, count, alloc) {
         history.game.unshift(entry);
     }
 
-    localStorage.setItem("challenge1111_history", JSON.stringify(history));
+    try {
+        localStorage.setItem("challenge1111_history", JSON.stringify(history));
+    } catch (e) {
+        console.error("Failed to save history:", e);
+    }
+}
+
+/* 要素レベルの厳格なヌルガードを追加した renderHistoryContainer（③対応） */
+function renderHistoryContainer(container, items) {
+    container.innerHTML = "";
+
+    if (!Array.isArray(items) || items.length === 0) {
+        container.textContent = "履歴はありません";
+        return;
+    }
+
+    items.forEach(item => {
+        if (!item || typeof item !== "object") {
+            return;
+        }
+
+        const div = document.createElement("div");
+        div.className = "history-item";
+
+        const time = String(item.time ?? "日時不明");
+        const count = Number.isFinite(item.count) ? item.count : "?";
+        const detail = String(item.detail ?? "詳細不明");
+
+        div.textContent = `[${time}] 計${count}個 (${detail})`;
+        container.appendChild(div);
+    });
+
+    if (container.childElementCount === 0) {
+        container.textContent = "履歴はありません";
+    }
 }
 
 function updateHistoryUI() {
     const history = getHistory();
-
-    if (history.game.length === 0) {
-        gameHistoryList.innerHTML = "履歴はありません";
-    } else {
-        gameHistoryList.innerHTML = history.game.map(item => 
-            `<div class="history-item">[${item.time}] 計${item.count}個 (${item.detail})</div>`
-        ).join("");
-    }
-
-    if (history.admin.length === 0) {
-        adminHistoryList.innerHTML = "履歴はありません";
-    } else {
-        adminHistoryList.innerHTML = history.admin.map(item => 
-            `<div class="history-item">[${item.time}] 計${item.count}個 (${item.detail})</div>`
-        ).join("");
-    }
+    renderHistoryContainer(gameHistoryList, history.game);
+    renderHistoryContainer(adminHistoryList, history.admin);
 }
 
 clearHistoryBtn.addEventListener("click", () => {
     if (confirm("すべての履歴をクリアしますか？")) {
-        localStorage.removeItem("challenge1111_history");
+        try {
+            localStorage.removeItem("challenge1111_history");
+        } catch (e) {
+            console.error("Failed to clear history:", e);
+        }
         updateHistoryUI();
     }
 });
