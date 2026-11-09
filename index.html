@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>11.11秒チャレンジ</title>
+<title>11.111秒チャレンジ</title>
 
 <style>
     html, body {
@@ -461,14 +461,14 @@
 <body>
 
 <div id="gameContainer">
-    <h1>11.11<span id="secretTrigger" class="secret-trigger">秒</span>チャレンジ</h1>
+    <h1>11.111<span id="secretTrigger" class="secret-trigger">秒</span>チャレンジ</h1>
 
-    <div id="target">目標：11.11秒</div>
+    <div id="target">目標：11.111秒</div>
 
-    <div id="timer">0.00</div>
+    <div id="timer">0.000</div>
 
     <div id="message">
-        STARTを押して11.11秒を目指せ！
+        STARTを押して11.111秒を目指せ！
     </div>
 
     <button id="startButton">START</button>
@@ -557,19 +557,21 @@
  * ⚙️ テストモード設定
  * ---------------------------------------------------------
  * 0 : 本番モード（プレイヤーの実力通り判定）
- * 1 : 失敗（0個獲得） (12.45秒)
- * 2 : いいね（1個獲得・暗転なし） (11.35秒)
+ * 1 : 失敗（0個獲得） (12.450秒)
+ * 2 : いいね（1個獲得・暗転なし） (11.350秒)
  * 3 : GREAT（3個獲得・11.1一致なら割れ / 11.のみなら一括表示）
- * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
+ * 4 : PERFECT（11個獲得・11.112ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
  * ========================================================= */
 const TEST_MODE = 0;
 
-const TARGET_TIME = 11.11;
+const TARGET_PERFECT_TIME = 11.111;
+const TARGET_BASE_TIME    = 11.110;
+
 const VISIBLE_TIME = 3.33;
 
-const RANGE_PERFECT = 0.01;
-const RANGE_GREAT   = 0.10;
-const RANGE_GOOD    = 0.50;
+const RANGE_PERFECT = 0.001; // 11.111秒 誤差0.001秒以内 (11.110～11.112秒)
+const RANGE_GREAT   = 0.005; // 11.110秒 誤差0.005秒以内 (11.105～11.115秒)
+const RANGE_GOOD    = 0.100; // 11.110秒 誤差0.100秒以内 (11.010～11.210秒)
 
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
@@ -774,8 +776,8 @@ function startGame() {
     startTime = performance.now();
     lastStartTime = startTime;
 
-    timer.textContent = "0.00";
-    message.textContent = "11.11秒を狙え！";
+    timer.textContent = "0.000";
+    message.textContent = "11.111秒を狙え！";
     reward.textContent = "";
 
     startButton.textContent = "STOP";
@@ -789,7 +791,7 @@ function updateTimer() {
     const elapsed = (performance.now() - startTime) / 1000;
 
     if (elapsed < VISIBLE_TIME) {
-        timer.textContent = elapsed.toFixed(2);
+        timer.textContent = elapsed.toFixed(3);
     } else {
         timer.textContent = "？？？";
     }
@@ -816,29 +818,32 @@ function stopGame() {
 
     finalTime = (performance.now() - startTime) / 1000;
     
-    const formattedString = finalTime.toFixed(2);
-    const roundedTime = parseFloat(formattedString);
+    displayTimeStr = finalTime.toFixed(3);
 
     startButton.textContent = "START";
 
-    const diff = Math.abs(roundedTime - TARGET_TIME);
+    const diffPerfect = Math.abs(finalTime - TARGET_PERFECT_TIME);
+    const diffBase    = Math.abs(finalTime - TARGET_BASE_TIME);
 
     let modeKey = TEST_MODE;
 
     if (modeKey === 0) {
-        if (diff > RANGE_GOOD) modeKey = 1;
-        else if (diff > RANGE_GREAT) modeKey = 2;
-        else if (diff > RANGE_PERFECT) modeKey = 3;
-        else modeKey = 4;
+        if (diffPerfect <= RANGE_PERFECT) {
+            modeKey = 4; // PERFECT: 11.111秒 ± 0.001
+        } else if (diffBase <= RANGE_GREAT) {
+            modeKey = 3; // GREAT: 11.110秒 ± 0.005
+        } else if (diffBase <= RANGE_GOOD) {
+            modeKey = 2; // GOOD: 11.110秒 ± 0.100
+        } else {
+            modeKey = 1; // 失敗
+        }
     }
 
     if (TEST_MODE !== 0) {
-        if (modeKey === 4) displayTimeStr = "11.11";
-        else if (modeKey === 3) displayTimeStr = "11.08";
-        else if (modeKey === 2) displayTimeStr = "11.35";
-        else displayTimeStr = "12.45";
-    } else {
-        displayTimeStr = formattedString;
+        if (modeKey === 4) displayTimeStr = "11.111";
+        else if (modeKey === 3) displayTimeStr = "11.108";
+        else if (modeKey === 2) displayTimeStr = "11.350";
+        else displayTimeStr = "12.450";
     }
 
     if (modeKey === 4) earnedCount = 11;
@@ -846,7 +851,7 @@ function stopGame() {
     else if (modeKey === 2) earnedCount = 1;
     else earnedCount = 0;
 
-    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.00）へ復帰 */
+    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.000）へ復帰 */
     if (modeKey === 1) {
         showingFailure = true;
         timer.textContent = displayTimeStr;
@@ -921,7 +926,7 @@ function showDigits(displayString, result) {
     resultDigits.innerHTML = "";
 
     if (result === "perfect") {
-        let fakeStr = "11.12";
+        let fakeStr = "11.112";
         let index = 0;
 
         function stepFake() {
@@ -934,14 +939,14 @@ function showDigits(displayString, result) {
                 addTimeout(() => {
                     playGlassCrashEffect(() => {
                         triggerCutin(() => {
-                            const lastChar = document.getElementById("digit_4");
+                            const lastChar = document.getElementById("digit_5"); // 6文字目 '2'
                             if (lastChar) {
                                 lastChar.classList.add("popOut");
                             }
 
                             addTimeout(() => {
-                                setDigitsHTML("11.11");
-                                const newLastChar = document.getElementById("digit_4");
+                                setDigitsHTML("11.111");
+                                const newLastChar = document.getElementById("digit_5");
                                 if (newLastChar) {
                                     newLastChar.classList.add("pushUp");
                                 }
@@ -1179,7 +1184,7 @@ function closeRouletteAndReset() {
     }
 }
 
-/* タイトル画面（0.00）への完全初期化 */
+/* タイトル画面（0.000）への完全初期化 */
 function resetToInitialState() {
     running = false;
     showingResult = false;
@@ -1196,8 +1201,8 @@ function resetToInitialState() {
         timerId = null;
     }
 
-    timer.textContent = "0.00";
-    message.textContent = "STARTを押して11.11秒を目指せ！";
+    timer.textContent = "0.000";
+    message.textContent = "STARTを押して11.111秒を目指せ！";
     reward.textContent = "";
     startButton.textContent = "START";
 
