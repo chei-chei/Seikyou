@@ -12,6 +12,8 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
         background: white;
         color: #222;
         font-family: sans-serif;
@@ -68,6 +70,12 @@
         position: relative;
         z-index: 100;
         outline: none;
+        touch-action: manipulation;
+    }
+
+    button:focus-visible, .admin-btn:focus-visible, .config-input:focus-visible {
+        outline: 3px solid #00aaff;
+        outline-offset: 2px;
     }
 
     #reward {
@@ -476,6 +484,21 @@
         border-radius: 4px;
         text-align: right;
     }
+    /* スマートフォン向けレスポンシブ調整 */
+    @media (max-width: 600px) {
+        #gameContainer { padding-top: 36px; }
+        h1 { font-size: 27px; margin-bottom: 18px; }
+        #target { font-size: 22px; }
+        #timer { font-size: 52px; margin: 12px; }
+        #message { font-size: 17px; }
+        #resultDigits { font-size: 50px; letter-spacing: 3px; }
+        #resultType { font-size: 34px; min-height: 56px; }
+        #resultReward { font-size: 26px; }
+        .cutinText { font-size: 68px; letter-spacing: 10px; }
+        .slotCard { width: 82px; }
+        .rouletteTitle { font-size: 21px; padding: 0 10px; text-align: center; }
+        #rouletteResultText { font-size: 19px; padding: 0 10px; text-align: center; }
+    }
 </style>
 </head>
 
@@ -549,11 +572,11 @@
         <table class="config-table">
             <tr>
                 <td>PERFECT (11個) 誤差範囲:</td>
-                <td>± <input type="number" id="rangePerfectInput" class="config-input" step="0.01" min="0" max="1" value="0.01"> 秒</td>
+                <td>± <input type="number" id="rangePerfectInput" class="config-input" step="0.01" min="0" max="5" value="0.01"> 秒</td>
             </tr>
             <tr>
                 <td>GREAT (3個) 誤差範囲:</td>
-                <td>± <input type="number" id="rangeGreatInput" class="config-input" step="0.01" min="0" max="2" value="0.10"> 秒</td>
+                <td>± <input type="number" id="rangeGreatInput" class="config-input" step="0.01" min="0" max="5" value="0.10"> 秒</td>
             </tr>
             <tr>
                 <td>GOOD (1個) 誤差範囲:</td>
@@ -584,6 +607,7 @@
         </table>
         <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             <button class="admin-btn primary" id="saveConfigBtn">設定を保存</button>
+            <button class="admin-btn" id="resetConfigBtn" style="background: #444;">初期値に戻す</button>
             <button class="admin-btn" id="autoAdjustRatioBtn" style="background: #444;">分配率を100%に自動調整</button>
             <span id="configMsg" style="font-weight: bold;"></span>
         </div>
@@ -606,6 +630,7 @@
 
     <div class="admin-section">
         <h3>📜 獲得履歴</h3>
+        <div id="historyStats" style="font-size: 14px; color: #ffd700; margin-bottom: 10px; line-height: 1.7;"></div>
         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 280px;">
                 <h4>【ゲーム獲得履歴】</h4>
@@ -638,6 +663,11 @@ const TEST_MODE = 0;
 
 const TARGET_TIME = 11.11;
 const VISIBLE_TIME = 3.33;
+const MAX_TIME = 30;
+
+/* 秒を整数センチ秒(1/100秒)に変換する。浮動小数点誤差で境界判定がズレるのを防ぐ */
+function toCents(sec) { return Math.round(sec * 100); }
+const TARGET_CENTS = toCents(TARGET_TIME); // 1111
 
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
@@ -729,6 +759,8 @@ const ratioPocky = document.getElementById("ratioPocky");
 const ratioPretz = document.getElementById("ratioPretz");
 const ratioToppo = document.getElementById("ratioToppo");
 const saveConfigBtn = document.getElementById("saveConfigBtn");
+const resetConfigBtn = document.getElementById("resetConfigBtn");
+const historyStats = document.getElementById("historyStats");
 const autoAdjustRatioBtn = document.getElementById("autoAdjustRatioBtn");
 const configMsg = document.getElementById("configMsg");
 
@@ -756,12 +788,28 @@ function clearAllTimeouts() {
 
 startButton.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (!running && !showingFailure && !showingGood) {
+    if (showingFailure) {
+        resetToInitialState();
+        return;
+    }
+    if (showingGood) {
+        showingGood = false;
+        currentSource = "game";
+        startRoulette();
+        return;
+    }
+    if (showingResult) {
+        if (canAdvanceFromResult) handleResultAdvance();
+        return;
+    }
+    if (!running) {
         if (performance.now() - lastResetTime < 300) return;
         startGame();
-    } else if (running) {
+    } else {
         if (performance.now() - lastStartTime >= 5000) {
             stopGame();
+        } else {
+            message.textContent = "5秒経つまで止められない！";
         }
     }
 });
@@ -779,7 +827,7 @@ document.addEventListener("click", (e) => {
     }
 });
 
-/* 画面状態（ステート）に依拠したキーボード（Enter/Space）制御（⑤対応） */
+/* 画面状態（ステート）に依拠したキーボード（Enter/Space）制御 */
 document.addEventListener("keydown", (e) => {
     if (e.repeat || adminPage.classList.contains("show")) return;
 
@@ -822,6 +870,8 @@ document.addEventListener("keydown", (e) => {
         if (running) {
             if (performance.now() - lastStartTime >= 5000) {
                 stopGame();
+            } else {
+                message.textContent = "5秒経つまで止められない！";
             }
             return;
         }
@@ -909,6 +959,11 @@ function updateTimer() {
 
     const elapsed = (performance.now() - startTime) / 1000;
 
+    if (elapsed >= MAX_TIME) {
+        stopGame();
+        return;
+    }
+
     if (elapsed < VISIBLE_TIME) {
         timer.textContent = elapsed.toFixed(2);
     } else {
@@ -920,12 +975,20 @@ function updateTimer() {
     }
 }
 
+/* タブが裏に回ったら、その時点のタイムでストップ扱いにする */
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && running) {
+        stopGame();
+    }
+});
+
 /* 誤差(diff)からランク(4:PERFECT, 3:GREAT, 2:GOOD, 1:失敗)を判定する共通関数 */
 function getRankFromDiff(diff) {
     const config = getConfig();
-    if (diff <= config.rangePerfect) return 4;
-    if (diff <= config.rangeGreat) return 3;
-    if (diff <= config.rangeGood) return 2;
+    const diffCents = toCents(diff);
+    if (diffCents <= toCents(config.rangePerfect)) return 4;
+    if (diffCents <= toCents(config.rangeGreat)) return 3;
+    if (diffCents <= toCents(config.rangeGood)) return 2;
     return 1;
 }
 
@@ -934,30 +997,13 @@ function generateSlippedTime(targetRank, rawTime) {
     const config = getConfig();
     const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.8) : (Math.random() < 0.2);
 
-    let searchStart = 0;
-    let searchEnd = 0;
-
-    if (targetRank === 3) { // GREAT (範囲: Perfect超 〜 Great以下)
-        searchStart = Math.round((config.rangePerfect + 0.01) * 100);
-        searchEnd = Math.round(config.rangeGreat * 100);
-    } else if (targetRank === 2) { // GOOD (範囲: Great超 〜 Good以下)
-        searchStart = Math.round((config.rangeGreat + 0.01) * 100);
-        searchEnd = Math.round(config.rangeGood * 100);
-    } else if (targetRank === 1) { // 失敗 (範囲: Good超 〜 Good+0.5秒)
-        searchStart = Math.round((config.rangeGood + 0.01) * 100);
-        searchEnd = Math.round((config.rangeGood + 0.50) * 100);
-    }
-
+    const maxOffsetCents = toCents(config.rangeGood) + 50;
     const validCandidates = [];
-    for (let offsetCents = searchStart; offsetCents <= searchEnd; offsetCents++) {
-        const offset = offsetCents / 100;
-        const candidateVal = isLate ? (TARGET_TIME + offset) : (TARGET_TIME - offset);
-        const candidateTimeStr = candidateVal.toFixed(2);
-
-        const roundedDiff = Math.abs(parseFloat(candidateTimeStr) - TARGET_TIME);
-        if (getRankFromDiff(roundedDiff) === targetRank) {
-            validCandidates.push(candidateTimeStr);
-        }
+    for (let offsetCents = 1; offsetCents <= maxOffsetCents; offsetCents++) {
+        if (getRankFromDiff(offsetCents / 100) !== targetRank) continue;
+        const candidateCents = isLate ? TARGET_CENTS + offsetCents : TARGET_CENTS - offsetCents;
+        if (candidateCents < 0) continue;
+        validCandidates.push((candidateCents / 100).toFixed(2));
     }
 
     if (validCandidates.length > 0) {
@@ -1064,7 +1110,7 @@ function playResultEffect(displayString, result) {
     
     resultType.className = "";
     resultType.textContent = "";
-    
+
     resultReward.className = "";
     resultReward.textContent = "";
     
@@ -1116,7 +1162,13 @@ function showDigits(displayString, result) {
     resultDigits.innerHTML = "";
 
     if (result === "perfect") {
-        let fakeStr = "11.12";
+        const finalStr = displayString;
+        const finalCents = Math.round(parseFloat(displayString) * 100);
+        // ニアミス側のダミー表示。最終表示は必ず実測値 finalStr に戻す
+        const fakeCents = (finalCents === TARGET_CENTS)
+            ? TARGET_CENTS + 1
+            : (finalCents < TARGET_CENTS ? finalCents - 1 : finalCents + 1);
+        let fakeStr = (fakeCents / 100).toFixed(2);
         let index = 0;
 
         function stepFake() {
@@ -1129,14 +1181,14 @@ function showDigits(displayString, result) {
                 addTimeout(() => {
                     playGlassCrashEffect(() => {
                         triggerCutin(() => {
-                            const lastChar = document.getElementById("digit_4");
+                            const lastChar = document.getElementById(`digit_${fakeStr.length - 1}`);
                             if (lastChar) {
                                 lastChar.classList.add("popOut");
                             }
 
                             addTimeout(() => {
-                                setDigitsHTML("11.11");
-                                const newLastChar = document.getElementById("digit_4");
+                                setDigitsHTML(finalStr);
+                                const newLastChar = document.getElementById(`digit_${finalStr.length - 1}`);
                                 if (newLastChar) {
                                     newLastChar.classList.add("pushUp");
                                 }
@@ -1321,9 +1373,16 @@ function startRoulette() {
     }
 
     rouletteTimer = setInterval(() => {
-        slot0.textContent = Math.floor(Math.random() * (earnedCount + 1));
-        slot1.textContent = Math.floor(Math.random() * (earnedCount + 1));
-        slot2.textContent = Math.floor(Math.random() * (earnedCount + 1));
+        const a = Math.floor(Math.random() * (earnedCount + 1));
+        const b = Math.floor(Math.random() * (earnedCount - a + 1));
+        const parts = [a, b, earnedCount - a - b];
+        for (let i = parts.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [parts[i], parts[j]] = [parts[j], parts[i]];
+        }
+        slot0.textContent = parts[0];
+        slot1.textContent = parts[1];
+        slot2.textContent = parts[2];
     }, 40);
 }
 
@@ -1377,7 +1436,6 @@ function closeRouletteAndReset() {
     }
 }
 
-/* 獲得数・分配数クリアを追加した resetToInitialState（②対応） */
 function resetToInitialState() {
     running = false;
     showingResult = false;
@@ -1442,9 +1500,12 @@ function createParticles(count) {
  * 🔒 隠し管理ページ ＆ 履歴保存・動的設定機能
  * ========================================================= */
 let longPressTimer = null;
+let configDirty = false;
+let configMsgTimer = null;
 
 function startLongPress(e) {
     e.preventDefault();
+    cancelLongPress();
     longPressTimer = setTimeout(() => {
         openAdminPage();
     }, 3000);
@@ -1473,7 +1534,29 @@ function openAdminPage() {
 }
 
 closeAdminBtn.addEventListener("click", () => {
+    if (configDirty && !confirm("未保存の設定変更があります。保存せずに閉じますか？")) {
+        return;
+    }
+    configDirty = false;
     adminPage.classList.remove("show");
+});
+
+resetConfigBtn.addEventListener("click", () => {
+    if (!confirm("すべての設定を初期値に戻しますか？")) return;
+    if (saveConfig({ ...DEFAULT_CONFIG })) {
+        loadConfigToUI();
+        configMsg.style.color = "#00ff00";
+        configMsg.textContent = "✓ 初期値に戻しました！";
+    } else {
+        configMsg.style.color = "#ff3333";
+        configMsg.textContent = "✕ 保存に失敗しました。";
+    }
+    if (configMsgTimer) clearTimeout(configMsgTimer);
+    configMsgTimer = setTimeout(() => { configMsg.textContent = ""; }, 2500);
+});
+
+customSpinCount.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runAdminRoulette(customSpinCount.value);
 });
 
 function runAdminRoulette(count) {
@@ -1495,44 +1578,48 @@ adminSpin3Btn.addEventListener("click", () => runAdminRoulette(3));
 adminSpin11Btn.addEventListener("click", () => runAdminRoulette(11));
 adminSpinCustomBtn.addEventListener("click", () => runAdminRoulette(customSpinCount.value));
 
+function isValidConfig(parsed) {
+    return (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        Number.isFinite(parsed.rangePerfect) &&
+        parsed.rangePerfect >= 0 &&
+        parsed.rangePerfect <= 5 &&
+        Number.isFinite(parsed.rangeGreat) &&
+        parsed.rangeGreat >= 0 &&
+        parsed.rangeGreat <= 5 &&
+        Number.isFinite(parsed.rangeGood) &&
+        parsed.rangeGood >= 0 &&
+        parsed.rangeGood <= 5 &&
+        parsed.rangePerfect < parsed.rangeGreat &&
+        parsed.rangeGreat < parsed.rangeGood &&
+        Number.isFinite(parsed.slipRate) &&
+        parsed.slipRate >= 0 &&
+        parsed.slipRate <= 100 &&
+        Number.isFinite(parsed.ratioPocky) &&
+        parsed.ratioPocky >= 0 &&
+        parsed.ratioPocky <= 100 &&
+        Number.isFinite(parsed.ratioPretz) &&
+        parsed.ratioPretz >= 0 &&
+        parsed.ratioPretz <= 100 &&
+        Number.isFinite(parsed.ratioToppo) &&
+        parsed.ratioToppo >= 0 &&
+        parsed.ratioToppo <= 100 &&
+        Math.abs(
+            parsed.ratioPocky +
+            parsed.ratioPretz +
+            parsed.ratioToppo - 100
+        ) <= 0.1
+    );
+}
+
 function getConfig() {
     try {
         const data = localStorage.getItem("challenge1111_config");
         if (!data) return { ...DEFAULT_CONFIG };
 
         const parsed = JSON.parse(data);
-
-        const isValid =
-            parsed !== null &&
-            typeof parsed === "object" &&
-            Number.isFinite(parsed.rangePerfect) &&
-            parsed.rangePerfect >= 0 &&
-            parsed.rangePerfect <= 5 &&
-            Number.isFinite(parsed.rangeGreat) &&
-            parsed.rangeGreat >= 0 &&
-            parsed.rangeGreat <= 5 &&
-            Number.isFinite(parsed.rangeGood) &&
-            parsed.rangeGood >= 0 &&
-            parsed.rangeGood <= 5 &&
-            parsed.rangePerfect < parsed.rangeGreat &&
-            parsed.rangeGreat < parsed.rangeGood &&
-            Number.isFinite(parsed.slipRate) &&
-            parsed.slipRate >= 0 &&
-            parsed.slipRate <= 100 &&
-            Number.isFinite(parsed.ratioPocky) &&
-            parsed.ratioPocky >= 0 &&
-            parsed.ratioPocky <= 100 &&
-            Number.isFinite(parsed.ratioPretz) &&
-            parsed.ratioPretz >= 0 &&
-            parsed.ratioPretz <= 100 &&
-            Number.isFinite(parsed.ratioToppo) &&
-            parsed.ratioToppo >= 0 &&
-            parsed.ratioToppo <= 100 &&
-            Math.abs(
-                parsed.ratioPocky +
-                parsed.ratioPretz +
-                parsed.ratioToppo - 100
-            ) <= 0.1;
+        const isValid = isValidConfig(parsed);
 
         return isValid ? parsed : { ...DEFAULT_CONFIG };
     } catch (e) {
@@ -1561,7 +1648,12 @@ function loadConfigToUI() {
     ratioPretz.value = config.ratioPretz;
     ratioToppo.value = config.ratioToppo;
     configMsg.textContent = "";
+    configDirty = false;
 }
+
+[rangePerfectInput, rangeGreatInput, rangeGoodInput, slipRateInput, ratioPocky, ratioPretz, ratioToppo].forEach(el => {
+    el.addEventListener("input", () => { configDirty = true; });
+});
 
 autoAdjustRatioBtn.addEventListener("click", () => {
     const pStr = ratioPocky.value.trim();
@@ -1578,25 +1670,22 @@ autoAdjustRatioBtn.addEventListener("click", () => {
         !Number.isFinite(pr) || pr < 0 || pr > 100 ||
         !Number.isFinite(t) || t < 0 || t > 100
     ) {
-        ratioPocky.value = "46.7";
-        ratioPretz.value = "33.3";
-        ratioToppo.value = "20.0";
+        alert("分配率に不正な値があるため自動調整できませんでした。入力を確認してください。");
         return;
     }
 
     const sum = p + pr + t;
     if (sum === 0) {
-        ratioPocky.value = "46.7";
-        ratioPretz.value = "33.3";
-        ratioToppo.value = "20.0";
+        alert("分配率がすべて0のため自動調整できませんでした。");
+        return;
     } else {
         ratioPocky.value = (Math.round((p / sum) * 1000) / 10).toFixed(1);
         ratioPretz.value = (Math.round((pr / sum) * 1000) / 10).toFixed(1);
         ratioToppo.value = (100 - parseFloat(ratioPocky.value) - parseFloat(ratioPretz.value)).toFixed(1);
+        configDirty = true;
     }
 });
 
-/* 判定レンジ上限完全チェックを追加した saveConfigBtn（①対応） */
 saveConfigBtn.addEventListener("click", () => {
     const rangeValues = [
         rangePerfectInput.value,
@@ -1643,9 +1732,9 @@ saveConfigBtn.addEventListener("click", () => {
         return;
     }
 
-    const sum = Math.round((p + pr + t) * 10) / 10;
-    if (Math.abs(sum - 100) > 0.1) {
-        alert(`景品分配率の合計が100%になりません（現在: ${sum}%）。数値を調整するか、「自動調整」ボタンを押してください。`);
+    const rawSum = p + pr + t;
+    if (Math.abs(rawSum - 100) > 0.1) {
+        alert(`景品分配率の合計が100%になりません（現在: ${rawSum.toFixed(2)}%）。数値を調整するか、「自動調整」ボタンを押してください。`);
         return;
     }
 
@@ -1667,13 +1756,16 @@ saveConfigBtn.addEventListener("click", () => {
     };
 
     if (saveConfig(config)) {
+        configDirty = false;
+        if (document.activeElement) document.activeElement.blur();
         configMsg.style.color = "#00ff00";
         configMsg.textContent = "✓ 設定を保存しました！";
     } else {
         configMsg.style.color = "#ff3333";
         configMsg.textContent = "✕ 保存に失敗しました。";
     }
-    setTimeout(() => { configMsg.textContent = ""; }, 2500);
+    if (configMsgTimer) clearTimeout(configMsgTimer);
+    configMsgTimer = setTimeout(() => { configMsg.textContent = ""; }, 2500);
 });
 
 function getHistory() {
@@ -1701,11 +1793,12 @@ function getHistory() {
 function saveHistory(source, count, alloc) {
     const history = getHistory();
     const now = new Date();
-    const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const timeStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     
     const entry = {
         time: timeStr,
         count: count,
+        alloc: [alloc[0], alloc[1], alloc[2]],
         detail: `ポッキー:${alloc[0]} / プリッツ:${alloc[1]} / トッポ:${alloc[2]}`
     };
 
@@ -1715,6 +1808,9 @@ function saveHistory(source, count, alloc) {
         history.game.unshift(entry);
     }
 
+    history.admin = history.admin.slice(0, 100);
+    history.game = history.game.slice(0, 100);
+
     try {
         localStorage.setItem("challenge1111_history", JSON.stringify(history));
     } catch (e) {
@@ -1722,7 +1818,6 @@ function saveHistory(source, count, alloc) {
     }
 }
 
-/* 要素レベルの厳格なヌルガードを追加した renderHistoryContainer（③対応） */
 function renderHistoryContainer(container, items) {
     container.innerHTML = "";
 
@@ -1752,10 +1847,32 @@ function renderHistoryContainer(container, items) {
     }
 }
 
+function summarizeHistory(items) {
+    let plays = 0, total = 0;
+    const alloc = [0, 0, 0];
+    (Array.isArray(items) ? items : []).forEach(item => {
+        if (!item || typeof item !== "object") return;
+        plays++;
+        if (Number.isFinite(item.count)) total += item.count;
+        if (Array.isArray(item.alloc)) {
+            for (let i = 0; i < 3; i++) if (Number.isFinite(item.alloc[i])) alloc[i] += item.alloc[i];
+        } else if (typeof item.detail === "string") {
+            const nums = item.detail.match(/\d+/g);
+            if (nums && nums.length >= 3) for (let i = 0; i < 3; i++) alloc[i] += Number(nums[i]);
+        }
+    });
+    return { plays, total, alloc };
+}
+
 function updateHistoryUI() {
     const history = getHistory();
     renderHistoryContainer(gameHistoryList, history.game);
     renderHistoryContainer(adminHistoryList, history.admin);
+    const g = summarizeHistory(history.game);
+    const a = summarizeHistory(history.admin);
+    historyStats.textContent =
+        `ゲーム累計: ${g.plays}回 / ${g.total}個（ポッキー${g.alloc[0]}・プリッツ${g.alloc[1]}・トッポ${g.alloc[2]}） ` +
+        `単体累計: ${a.plays}回 / ${a.total}個（ポッキー${a.alloc[0]}・プリッツ${a.alloc[1]}・トッポ${a.alloc[2]}）`;
 }
 
 clearHistoryBtn.addEventListener("click", () => {
