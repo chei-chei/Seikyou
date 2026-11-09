@@ -878,30 +878,37 @@ function updateTimer() {
     }
 }
 
-/* 動的レンジ設定に追従して滑り偽装タイムを生成する関数 */
+/* 動的レンジ設定に追従し、設定値の間隔が狭くても破綻しない滑り偽装タイム生成 */
 function generateSlippedTime(targetRank, rawTime) {
     const config = getConfig();
     const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.8) : (Math.random() < 0.2);
 
+    let offset = 0;
+
     if (targetRank === 3) {
-        // GREAT領域（Perfect超〜Great以下）
-        const minOffset = config.rangePerfect + 0.01;
+        // GREAT領域（Perfect超 〜 Great以下）
         const maxOffset = config.rangeGreat;
-        const offset = minOffset + Math.random() * Math.max(0.01, (maxOffset - minOffset));
-        return (isLate ? TARGET_TIME + offset : TARGET_TIME - offset).toFixed(2);
+        let minOffset = config.rangePerfect + 0.005;
+        if (minOffset >= maxOffset) {
+            minOffset = maxOffset * 0.5;
+        }
+        offset = minOffset + Math.random() * (maxOffset - minOffset);
     } else if (targetRank === 2) {
-        // GOOD領域（Great超〜Good以下）
-        const minOffset = config.rangeGreat + 0.01;
+        // GOOD領域（Great超 〜 Good以下）
         const maxOffset = config.rangeGood;
-        const offset = minOffset + Math.random() * Math.max(0.01, (maxOffset - minOffset));
-        return (isLate ? TARGET_TIME + offset : TARGET_TIME - offset).toFixed(2);
+        let minOffset = config.rangeGreat + 0.005;
+        if (minOffset >= maxOffset) {
+            minOffset = maxOffset * 0.5;
+        }
+        offset = minOffset + Math.random() * (maxOffset - minOffset);
     } else if (targetRank === 1) {
         // 失敗領域（Good超）
-        const minOffset = config.rangeGood + 0.01;
-        const offset = minOffset + Math.random() * 0.35;
-        return (isLate ? TARGET_TIME + offset : TARGET_TIME - offset).toFixed(2);
+        const minOffset = config.rangeGood + 0.005;
+        offset = minOffset + Math.random() * 0.30;
     }
-    return rawTime.toFixed(2);
+
+    const calculatedTime = isLate ? (TARGET_TIME + offset) : (TARGET_TIME - offset);
+    return calculatedTime.toFixed(2);
 }
 
 function stopGame() {
@@ -996,7 +1003,7 @@ function playResultEffect(displayString, result) {
     effect.className = "";
     resultDigits.className = "";
     
-    // クラスおよびテキストの完全リセット
+    // 演出用クラスおよびテキストの完全リセット
     resultType.className = "";
     resultType.textContent = "";
     
@@ -1419,7 +1426,7 @@ function getConfig() {
         rangePerfect: 0.01,
         rangeGreat: 0.10,
         rangeGood: 0.50,
-        slipRate: 0,
+        slipRate: 0, // デフォルトの初期設定は 0%
         ratioPocky: 46.7,
         ratioPretz: 33.3,
         ratioToppo: 20.0
