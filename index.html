@@ -995,8 +995,14 @@ function showResult(displayString, result) {
 function playResultEffect(displayString, result) {
     effect.className = "";
     resultDigits.className = "";
+    
+    // クラスおよびテキストの完全リセット
+    resultType.className = "";
     resultType.textContent = "";
+    
+    resultReward.className = "";
     resultReward.textContent = "";
+    
     retryHint.classList.remove("show");
 
     resultDigits.innerHTML = "";
