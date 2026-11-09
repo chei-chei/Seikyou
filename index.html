@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>11.111秒チャレンジ</title>
+<title>11.11秒チャレンジ</title>
 
 <style>
     html, body {
@@ -421,6 +421,8 @@
         display: flex;
         gap: 10px;
         margin-top: 10px;
+        flex-wrap: wrap;
+        align-items: center;
     }
 
     .admin-btn {
@@ -455,20 +457,39 @@
         border-bottom: 1px dashed #333;
         padding: 4px 0;
     }
+
+    .config-table {
+        width: 100%;
+        max-width: 500px;
+        margin-top: 10px;
+    }
+    .config-table td {
+        padding: 6px;
+    }
+    .config-input {
+        width: 80px;
+        padding: 6px;
+        font-size: 16px;
+        background: #111;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 4px;
+        text-align: right;
+    }
 </style>
 </head>
 
 <body>
 
 <div id="gameContainer">
-    <h1>11.111<span id="secretTrigger" class="secret-trigger">秒</span>チャレンジ</h1>
+    <h1>11.11<span id="secretTrigger" class="secret-trigger">秒</span>チャレンジ</h1>
 
-    <div id="target">目標：11.111秒</div>
+    <div id="target">目標：11.11秒</div>
 
-    <div id="timer">0.000</div>
+    <div id="timer">0.00</div>
 
     <div id="message">
-        STARTを押して11.111秒を目指せ！
+        STARTを押して11.11秒を目指せ！
     </div>
 
     <button id="startButton">START</button>
@@ -523,12 +544,43 @@
     </div>
 
     <div class="admin-section">
+        <h3>🎛️ 確率＆分配設定</h3>
+        <table class="config-table">
+            <tr>
+                <td>タイマー滑り（ランクダウン）確率:</td>
+                <td><input type="number" id="slipRateInput" class="config-input" min="0" max="100" value="0"> %</td>
+            </tr>
+            <tr>
+                <td>ポッキー分配率:</td>
+                <td><input type="number" id="ratioPocky" class="config-input" min="0" max="100" value="46.7"> %</td>
+            </tr>
+            <tr>
+                <td>プリッツ分配率:</td>
+                <td><input type="number" id="ratioPretz" class="config-input" min="0" max="100" value="33.3"> %</td>
+            </tr>
+            <tr>
+                <td>トッポ分配率:</td>
+                <td><input type="number" id="ratioToppo" class="config-input" min="0" max="100" value="20.0"> %</td>
+            </tr>
+        </table>
+        <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
+            <button class="admin-btn primary" id="saveConfigBtn">設定を保存</button>
+            <span id="configMsg" style="color: #00ff00; font-weight: bold;"></span>
+        </div>
+    </div>
+
+    <div class="admin-section">
         <h3>🎰 ルーレット単体実行</h3>
         <p>個数を指定してルーレットを実行します（結果はルーレット履歴に保存されます）。</p>
         <div class="admin-btn-group">
             <button class="admin-btn primary" id="adminSpin1Btn">1個で実行</button>
             <button class="admin-btn primary" id="adminSpin3Btn">3個で実行</button>
             <button class="admin-btn primary" id="adminSpin11Btn">11個で実行</button>
+            
+            <span style="margin: 0 5px; color: #666;">|</span>
+            
+            <input type="number" id="customSpinCount" class="config-input" min="1" max="999" value="5" placeholder="個数" style="width: 70px;">
+            <button class="admin-btn primary" id="adminSpinCustomBtn">指定数で実行</button>
         </div>
     </div>
 
@@ -557,21 +609,19 @@
  * ⚙️ テストモード設定
  * ---------------------------------------------------------
  * 0 : 本番モード（プレイヤーの実力通り判定）
- * 1 : 失敗（0個獲得） (12.450秒)
- * 2 : いいね（1個獲得・暗転なし） (11.350秒)
+ * 1 : 失敗（0個獲得） (12.45秒)
+ * 2 : いいね（1個獲得・暗転なし） (11.35秒)
  * 3 : GREAT（3個獲得・11.1一致なら割れ / 11.のみなら一括表示）
- * 4 : PERFECT（11個獲得・11.112ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
+ * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
  * ========================================================= */
 const TEST_MODE = 0;
 
-const TARGET_PERFECT_TIME = 11.111;
-const TARGET_BASE_TIME    = 11.110;
-
+const TARGET_TIME = 11.11;
 const VISIBLE_TIME = 3.33;
 
-const RANGE_PERFECT = 0.001; // 11.111秒 誤差0.001秒以内 (11.110～11.112秒)
-const RANGE_GREAT   = 0.005; // 11.110秒 誤差0.005秒以内 (11.105～11.115秒)
-const RANGE_GOOD    = 0.100; // 11.110秒 誤差0.100秒以内 (11.010～11.210秒)
+const RANGE_PERFECT = 0.01; // 誤差 ±0.01秒 (11.10〜11.12)
+const RANGE_GREAT   = 0.10; // 誤差 ±0.10秒 (11.01〜11.09, 11.13〜11.21)
+const RANGE_GOOD    = 0.50; // 誤差 ±0.50秒 (10.61〜11.00, 11.22〜11.61)
 
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
@@ -637,9 +687,19 @@ const closeAdminBtn = document.getElementById("closeAdminBtn");
 const gameHistoryList = document.getElementById("gameHistoryList");
 const adminHistoryList = document.getElementById("adminHistoryList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
 const adminSpin1Btn = document.getElementById("adminSpin1Btn");
 const adminSpin3Btn = document.getElementById("adminSpin3Btn");
 const adminSpin11Btn = document.getElementById("adminSpin11Btn");
+const customSpinCount = document.getElementById("customSpinCount");
+const adminSpinCustomBtn = document.getElementById("adminSpinCustomBtn");
+
+const slipRateInput = document.getElementById("slipRateInput");
+const ratioPocky = document.getElementById("ratioPocky");
+const ratioPretz = document.getElementById("ratioPretz");
+const ratioToppo = document.getElementById("ratioToppo");
+const saveConfigBtn = document.getElementById("saveConfigBtn");
+const configMsg = document.getElementById("configMsg");
 
 function resizeCanvas() {
     crackCanvas.width = window.innerWidth;
@@ -660,7 +720,7 @@ function clearAllTimeouts() {
 }
 
 startButton.addEventListener("click", (e) => {
-    e.stopPropagation(); // documentへのイベント伝播をブロック
+    e.stopPropagation();
     if (!running && !showingFailure && !showingGood) {
         if (performance.now() - lastResetTime < 300) return;
         startGame();
@@ -674,7 +734,6 @@ startButton.addEventListener("click", (e) => {
 /* 全体クリック（タップ）対応 */
 document.addEventListener("click", (e) => {
     if (e.target === startButton || adminPage.classList.contains("show")) return;
-    // STOPボタンを押した直後の画面タップによるスキップを防ぐ
     if (performance.now() - lastStopTime < 300) return;
 
     if (showingFailure) {
@@ -776,8 +835,8 @@ function startGame() {
     startTime = performance.now();
     lastStartTime = startTime;
 
-    timer.textContent = "0.000";
-    message.textContent = "11.111秒を狙え！";
+    timer.textContent = "0.00";
+    message.textContent = "11.11秒を狙え！";
     reward.textContent = "";
 
     startButton.textContent = "STOP";
@@ -791,7 +850,7 @@ function updateTimer() {
     const elapsed = (performance.now() - startTime) / 1000;
 
     if (elapsed < VISIBLE_TIME) {
-        timer.textContent = elapsed.toFixed(3);
+        timer.textContent = elapsed.toFixed(2);
     } else {
         timer.textContent = "？？？";
     }
@@ -801,11 +860,40 @@ function updateTimer() {
     }
 }
 
+/* 降格先の公式ルール範囲に合った自然なタイム文字列を生成する関数 */
+function generateSlippedTime(targetRank, rawTime) {
+    const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.8) : (Math.random() < 0.2);
+
+    if (targetRank === 3) {
+        // GREAT範囲（±0.10s以内）: 11.01〜11.09 または 11.13〜11.21
+        if (isLate) {
+            return (11.13 + Math.floor(Math.random() * 7) / 100).toFixed(2); // 11.13〜11.19
+        } else {
+            return (11.03 + Math.floor(Math.random() * 7) / 100).toFixed(2); // 11.03〜11.09
+        }
+    } else if (targetRank === 2) {
+        // GOOD範囲（±0.50s以内）: 10.61〜11.00 または 11.22〜11.61
+        if (isLate) {
+            return (11.23 + Math.floor(Math.random() * 25) / 100).toFixed(2); // 11.23〜11.47
+        } else {
+            return (10.70 + Math.floor(Math.random() * 25) / 100).toFixed(2); // 10.70〜10.94
+        }
+    } else if (targetRank === 1) {
+        // 失敗範囲（±0.50s超）: 10.60以下 または 11.62以上
+        if (isLate) {
+            return (11.63 + Math.floor(Math.random() * 30) / 100).toFixed(2); // 11.63〜11.92
+        } else {
+            return (10.30 + Math.floor(Math.random() * 28) / 100).toFixed(2); // 10.30〜10.58
+        }
+    }
+    return rawTime.toFixed(2);
+}
+
 function stopGame() {
     if (!running) return;
 
     running = false;
-    lastStopTime = performance.now(); // 停止時のタイムスタンプ保持
+    lastStopTime = performance.now();
 
     if (timerId !== null) {
         cancelAnimationFrame(timerId);
@@ -818,32 +906,41 @@ function stopGame() {
 
     finalTime = (performance.now() - startTime) / 1000;
     
-    displayTimeStr = finalTime.toFixed(3);
+    const rawFormattedString = finalTime.toFixed(2);
+    const roundedTime = parseFloat(rawFormattedString);
 
     startButton.textContent = "START";
 
-    const diffPerfect = Math.abs(finalTime - TARGET_PERFECT_TIME);
-    const diffBase    = Math.abs(finalTime - TARGET_BASE_TIME);
+    const diff = Math.abs(roundedTime - TARGET_TIME);
 
     let modeKey = TEST_MODE;
 
     if (modeKey === 0) {
-        if (diffPerfect <= RANGE_PERFECT) {
-            modeKey = 4; // PERFECT: 11.111秒 ± 0.001
-        } else if (diffBase <= RANGE_GREAT) {
-            modeKey = 3; // GREAT: 11.110秒 ± 0.005
-        } else if (diffBase <= RANGE_GOOD) {
-            modeKey = 2; // GOOD: 11.110秒 ± 0.100
-        } else {
-            modeKey = 1; // 失敗
+        if (diff > RANGE_GOOD) modeKey = 1;        // 0個（失敗: >0.50s）
+        else if (diff > RANGE_GREAT) modeKey = 2;   // 1個（GOOD: >0.10s）
+        else if (diff > RANGE_PERFECT) modeKey = 3; // 3個（GREAT: >0.01s）
+        else modeKey = 4;                           // 11個（PERFECT: <=0.01s）
+    }
+
+    // 右滑り（ランクダウン）判定
+    const config = getConfig();
+    let displayTimeOverride = null;
+
+    if (TEST_MODE === 0 && modeKey > 1) {
+        const randVal = Math.random() * 100;
+        if (randVal < config.slipRate) {
+            modeKey--; // 1ランク降格
+            displayTimeOverride = generateSlippedTime(modeKey, roundedTime);
         }
     }
 
     if (TEST_MODE !== 0) {
-        if (modeKey === 4) displayTimeStr = "11.111";
-        else if (modeKey === 3) displayTimeStr = "11.108";
-        else if (modeKey === 2) displayTimeStr = "11.350";
-        else displayTimeStr = "12.450";
+        if (modeKey === 4) displayTimeStr = "11.11";
+        else if (modeKey === 3) displayTimeStr = "11.08";
+        else if (modeKey === 2) displayTimeStr = "11.35";
+        else displayTimeStr = "12.45";
+    } else {
+        displayTimeStr = displayTimeOverride ? displayTimeOverride : rawFormattedString;
     }
 
     if (modeKey === 4) earnedCount = 11;
@@ -851,14 +948,14 @@ function stopGame() {
     else if (modeKey === 2) earnedCount = 1;
     else earnedCount = 0;
 
-    /* 1 (失敗)：フラグを立ててEnterかタップでタイトル画面（0.000）へ復帰 */
+    /* 1 (失敗) */
     if (modeKey === 1) {
         showingFailure = true;
         timer.textContent = displayTimeStr;
         message.textContent = "残念。。また挑戦してね！ (Enterかタップでタイトルへ)";
     }
 
-    /* 2 (1個獲得)：フラグを立ててEnterかタップでルーレットへ */
+    /* 2 (1個獲得) */
     else if (modeKey === 2) {
         showingGood = true;
         timer.textContent = displayTimeStr;
@@ -866,7 +963,7 @@ function stopGame() {
         reward.textContent = "🎁 1個獲得！ (Enterかタップで分配へ)";
     }
 
-    /* 3 (GREAT) / 4 (PERFECT)：演出へ */
+    /* 3 (GREAT) / 4 (PERFECT) */
     else {
         timer.textContent = "？？？";
         let modeName = (modeKey === 4) ? "perfect" : "great";
@@ -926,7 +1023,7 @@ function showDigits(displayString, result) {
     resultDigits.innerHTML = "";
 
     if (result === "perfect") {
-        let fakeStr = "11.112";
+        let fakeStr = "11.12";
         let index = 0;
 
         function stepFake() {
@@ -939,14 +1036,14 @@ function showDigits(displayString, result) {
                 addTimeout(() => {
                     playGlassCrashEffect(() => {
                         triggerCutin(() => {
-                            const lastChar = document.getElementById("digit_5"); // 6文字目 '2'
+                            const lastChar = document.getElementById("digit_4");
                             if (lastChar) {
                                 lastChar.classList.add("popOut");
                             }
 
                             addTimeout(() => {
-                                setDigitsHTML("11.111");
-                                const newLastChar = document.getElementById("digit_5");
+                                setDigitsHTML("11.11");
+                                const newLastChar = document.getElementById("digit_4");
                                 if (newLastChar) {
                                     newLastChar.classList.add("pushUp");
                                 }
@@ -1082,15 +1179,15 @@ function playGlassCrashEffect(onComplete) {
     }, 2000);
 }
 
-/* 7:5:3の比率で景品をランダム分配するアルゴリズム */
+/* 設定された動的割合で景品をランダム分配するアルゴリズム */
 function allocateItems(total) {
     let res = [0, 0, 0];
-    // ポッキー:7, プリッツ:5, トッポ:3 (合計15)
-    const weights = [7, 5, 3];
-    const totalWeight = 15;
+    const config = getConfig();
+    const weights = [config.ratioPocky, config.ratioPretz, config.ratioToppo];
+    const totalWeight = weights[0] + weights[1] + weights[2];
 
     for (let i = 0; i < total; i++) {
-        let r = Math.random() * totalWeight;
+        let r = Math.random() * (totalWeight > 0 ? totalWeight : 100);
         if (r < weights[0]) {
             res[0]++; // ポッキー
         } else if (r < weights[0] + weights[1]) {
@@ -1160,7 +1257,6 @@ function stopRoulette() {
     rouletteResultText.textContent = "🎉 " + rewardSummary + " 獲得！";
     rouletteHint.textContent = currentSource === "admin" ? "Enterキーかタップで戻る" : "Enterキーかタップでタイトルに戻る";
 
-    // 履歴へ保存
     saveHistory(currentSource, earnedCount, finalAllocation);
 
     flash.classList.remove("active");
@@ -1184,7 +1280,7 @@ function closeRouletteAndReset() {
     }
 }
 
-/* タイトル画面（0.000）への完全初期化 */
+/* タイトル画面（0.00）への完全初期化 */
 function resetToInitialState() {
     running = false;
     showingResult = false;
@@ -1201,8 +1297,8 @@ function resetToInitialState() {
         timerId = null;
     }
 
-    timer.textContent = "0.000";
-    message.textContent = "STARTを押して11.111秒を目指せ！";
+    timer.textContent = "0.00";
+    message.textContent = "STARTを押して11.11秒を目指せ！";
     reward.textContent = "";
     startButton.textContent = "START";
 
@@ -1243,7 +1339,7 @@ function createParticles(count) {
 }
 
 /* =========================================================
- * 🔒 隠し管理ページ ＆ 履歴保存機能
+ * 🔒 隠し管理ページ ＆ 履歴保存・動的設定機能
  * ========================================================= */
 let longPressTimer = null;
 
@@ -1251,7 +1347,7 @@ function startLongPress(e) {
     e.preventDefault();
     longPressTimer = setTimeout(() => {
         openAdminPage();
-    }, 3000); // 3秒長押し
+    }, 3000);
 }
 
 function cancelLongPress() {
@@ -1271,6 +1367,7 @@ secretTrigger.addEventListener("touchcancel", cancelLongPress);
 
 function openAdminPage() {
     resetToInitialState();
+    loadConfigToUI();
     adminPage.classList.add("show");
     updateHistoryUI();
 }
@@ -1279,9 +1376,14 @@ closeAdminBtn.addEventListener("click", () => {
     adminPage.classList.remove("show");
 });
 
-/* 単体ルーレット実行ボタン */
+/* 単体ルーレット実行ボタン処理 */
 function runAdminRoulette(count) {
-    earnedCount = count;
+    const cnt = parseInt(count, 10);
+    if (isNaN(cnt) || cnt <= 0) {
+        alert("有効な個数を入力してください。");
+        return;
+    }
+    earnedCount = cnt;
     currentSource = "admin";
     adminPage.classList.remove("show");
     startRoulette();
@@ -1290,8 +1392,55 @@ function runAdminRoulette(count) {
 adminSpin1Btn.addEventListener("click", () => runAdminRoulette(1));
 adminSpin3Btn.addEventListener("click", () => runAdminRoulette(3));
 adminSpin11Btn.addEventListener("click", () => runAdminRoulette(11));
+adminSpinCustomBtn.addEventListener("click", () => runAdminRoulette(customSpinCount.value));
 
-/* LocalStorage 履歴管理 */
+/* LocalStorage 履歴・設定管理 */
+function getConfig() {
+    const data = localStorage.getItem("challenge1111_config");
+    return data ? JSON.parse(data) : {
+        slipRate: 0,
+        ratioPocky: 46.7,
+        ratioPretz: 33.3,
+        ratioToppo: 20.0
+    };
+}
+
+function saveConfig(config) {
+    localStorage.setItem("challenge1111_config", JSON.stringify(config));
+}
+
+function loadConfigToUI() {
+    const config = getConfig();
+    slipRateInput.value = config.slipRate;
+    ratioPocky.value = config.ratioPocky;
+    ratioPretz.value = config.ratioPretz;
+    ratioToppo.value = config.ratioToppo;
+    configMsg.textContent = "";
+}
+
+saveConfigBtn.addEventListener("click", () => {
+    const p = parseFloat(ratioPocky.value) || 0;
+    const pr = parseFloat(ratioPretz.value) || 0;
+    const t = parseFloat(ratioToppo.value) || 0;
+    const sum = Math.round((p + pr + t) * 10) / 10;
+
+    if (Math.abs(sum - 100) > 0.1) {
+        alert(`景品分配率の合計が100%になりません（現在: ${sum}%）。数値を調整してください。`);
+        return;
+    }
+
+    const config = {
+        slipRate: Math.max(0, Math.min(100, parseFloat(slipRateInput.value) || 0)),
+        ratioPocky: p,
+        ratioPretz: pr,
+        ratioToppo: t
+    };
+
+    saveConfig(config);
+    configMsg.textContent = "✓ 設定を保存しました！";
+    setTimeout(() => { configMsg.textContent = ""; }, 2500);
+});
+
 function getHistory() {
     const data = localStorage.getItem("challenge1111_history");
     return data ? JSON.parse(data) : { game: [], admin: [] };
