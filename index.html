@@ -484,7 +484,6 @@
         border-radius: 4px;
         text-align: right;
     }
-    /* スマートフォン向けレスポンシブ調整 */
     @media (max-width: 600px) {
         #gameContainer { padding-top: 36px; }
         h1 { font-size: 27px; margin-bottom: 18px; }
@@ -520,15 +519,12 @@
     <div id="reward"></div>
 </div>
 
-<!-- 画面割れ演出用Canvas -->
 <canvas id="crackCanvas"></canvas>
 
-<!-- 金文字激熱カットイン -->
 <div id="cutinOverlay">
     <div class="cutinText">激熱</div>
 </div>
 
-<!-- 暗転結果演出 -->
 <div id="effect">
     <div id="resultDigits"></div>
     <div id="resultType"></div>
@@ -536,7 +532,6 @@
     <div id="retryHint" class="retryHint">Enterキーかタップで次へ</div>
 </div>
 
-<!-- 景品分配ルーレット画面 -->
 <div id="rouletteOverlay">
     <div class="rouletteTitle" id="rouletteTitle">🎁 合計 0個 を分配中… 🎁</div>
 
@@ -559,7 +554,6 @@
     <div id="rouletteHint" class="retryHint">Enterキーかタップで確定</div>
 </div>
 
-<!-- 管理用ページ -->
 <div id="adminPage">
     <div class="admin-header">
         <h2>⚙️ システム管理ページ</h2>
@@ -650,29 +644,19 @@
 <div id="flash"></div>
 
 <script>
-/* =========================================================
- * ⚙️ テストモード設定
- * ---------------------------------------------------------
- * 0 : 本番モード（プレイヤーの実力通り判定）
- * 1 : 失敗（0個獲得） (12.45秒)
- * 2 : いいね（1個獲得・暗転なし） (11.35秒)
- * 3 : GREAT（3個獲得・11.1一致なら割れ / 11.のみなら一括表示）
- * 4 : PERFECT（11個獲得・11.12ハズレ ➔ 画面割れ ➔ 激熱2秒 ➔ 押し上げ昇格）
- * ========================================================= */
 const TEST_MODE = 0;
 
 const TARGET_TIME = 11.11;
 const VISIBLE_TIME = 3.33;
 const MAX_TIME = 30;
 
-/* 秒を整数センチ秒(1/100秒)に変換する。浮動小数点誤差で境界判定がズレるのを防ぐ */
+/* 秒を整数センチ秒(1/100秒)に変換 */
 function toCents(sec) { return Math.round(sec * 100); }
 const TARGET_CENTS = toCents(TARGET_TIME); // 1111
 
 const DARK_TIME = 800;
 const DIGIT_INTERVAL = 900;
 
-/* デフォルト設定オブジェクト */
 const DEFAULT_CONFIG = {
     rangePerfect: 0.01,
     rangeGreat: 0.10,
@@ -683,7 +667,6 @@ const DEFAULT_CONFIG = {
     ratioToppo: 20.0
 };
 
-/* ゲーム状態 */
 let running = false;
 let startTime = 0;
 let timerId = null;
@@ -710,7 +693,6 @@ let lastResetTime = 0;
 
 let currentSource = "game";
 
-/* HTML要素 */
 const gameContainer = document.getElementById("gameContainer");
 const timer = document.getElementById("timer");
 const message = document.getElementById("message");
@@ -827,7 +809,6 @@ document.addEventListener("click", (e) => {
     }
 });
 
-/* 画面状態（ステート）に依拠したキーボード（Enter/Space）制御 */
 document.addEventListener("keydown", (e) => {
     if (e.repeat || adminPage.classList.contains("show")) return;
 
@@ -838,27 +819,21 @@ document.addEventListener("keydown", (e) => {
             document.activeElement.blur();
         }
 
-        // 1. ルーレット画面が表示中の場合
         if (rouletteOverlay.classList.contains("show")) {
             handleRouletteAction();
             return;
         }
 
-        // 2. 結果演出画面（GREAT / PERFECT）が表示中の場合
         if (showingResult) {
-            if (canAdvanceFromResult) {
-                handleResultAdvance();
-            }
+            if (canAdvanceFromResult) handleResultAdvance();
             return;
         }
 
-        // 3. 失敗（0個）画面表示中の場合
         if (showingFailure) {
             resetToInitialState();
             return;
         }
 
-        // 4. いいね（1個）画面表示中の場合
         if (showingGood) {
             showingGood = false;
             currentSource = "game";
@@ -866,7 +841,6 @@ document.addEventListener("keydown", (e) => {
             return;
         }
 
-        // 5. ゲームプレイ中（タイマー稼働中）の場合
         if (running) {
             if (performance.now() - lastStartTime >= 5000) {
                 stopGame();
@@ -876,7 +850,6 @@ document.addEventListener("keydown", (e) => {
             return;
         }
 
-        // 6. タイトル・待機画面の場合
         if (performance.now() - lastResetTime >= 300) {
             startGame();
         }
@@ -975,14 +948,12 @@ function updateTimer() {
     }
 }
 
-/* タブが裏に回ったら、その時点のタイムでストップ扱いにする */
 document.addEventListener("visibilitychange", () => {
     if (document.hidden && running) {
         stopGame();
     }
 });
 
-/* 誤差(diff)からランク(4:PERFECT, 3:GREAT, 2:GOOD, 1:失敗)を判定する共通関数 */
 function getRankFromDiff(diff) {
     const config = getConfig();
     const diffCents = toCents(diff);
@@ -992,28 +963,50 @@ function getRankFromDiff(diff) {
     return 1;
 }
 
-/* 離散値候補（0.01秒刻み）を列挙し、対象ランクに100%一致するタイムを確定抽出する関数 */
+/* 修正版：浮動小数点誤差を完全排除＆数ミリ秒単位で分散させる裏操作用離散タイム生成 */
 function generateSlippedTime(targetRank, rawTime) {
     const config = getConfig();
-    const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.8) : (Math.random() < 0.2);
+    const isLate = (rawTime >= TARGET_TIME) ? (Math.random() < 0.7) : (Math.random() < 0.3);
 
-    const maxOffsetCents = toCents(config.rangeGood) + 50;
+    const perfCents = toCents(config.rangePerfect);
+    const greatCents = toCents(config.rangeGreat);
+    const goodCents = toCents(config.rangeGood);
+
+    let minOffsetCents = 0;
+    let maxOffsetCents = 0;
+
+    if (targetRank === 4) { // PERFECT
+        minOffsetCents = 0;
+        maxOffsetCents = perfCents;
+    } else if (targetRank === 3) { // GREAT
+        minOffsetCents = perfCents + 1;
+        maxOffsetCents = greatCents;
+    } else if (targetRank === 2) { // GOOD
+        minOffsetCents = greatCents + 1;
+        maxOffsetCents = goodCents;
+    } else { // 失敗 (0個)
+        minOffsetCents = goodCents + 1;
+        maxOffsetCents = goodCents + 40; // 不自然に遠くならないよう+0.40秒以内に抑える
+    }
+
+    if (minOffsetCents > maxOffsetCents) return null;
+
     const validCandidates = [];
-    for (let offsetCents = 1; offsetCents <= maxOffsetCents; offsetCents++) {
-        if (getRankFromDiff(offsetCents / 100) !== targetRank) continue;
+    for (let offsetCents = minOffsetCents; offsetCents <= maxOffsetCents; offsetCents++) {
         const candidateCents = isLate ? TARGET_CENTS + offsetCents : TARGET_CENTS - offsetCents;
-        if (candidateCents < 0) continue;
-        validCandidates.push((candidateCents / 100).toFixed(2));
+        if (candidateCents > 0) {
+            validCandidates.push((candidateCents / 100).toFixed(2));
+        }
     }
 
     if (validCandidates.length > 0) {
-        const randomIndex = Math.floor(Math.random() * validCandidates.length);
-        return validCandidates[randomIndex];
+        return validCandidates[Math.floor(Math.random() * validCandidates.length)];
     }
 
     return null;
 }
 
+/* 修正版：裏操作（滑り）がプレイヤーに絶対にバレない stopGame 処理 */
 function stopGame() {
     if (!running) return;
 
@@ -1045,7 +1038,7 @@ function stopGame() {
         modeKey = getRankFromDiff(diff);
     }
 
-    // 右滑り（ランクダウン）判定（アトミック降格制御）
+    // 裏操作：slipRate の確率でランクダウンさせ、表示タイムごとすり替える
     let displayTimeOverride = null;
 
     if (TEST_MODE === 0 && modeKey > 1) {
@@ -1164,7 +1157,6 @@ function showDigits(displayString, result) {
     if (result === "perfect") {
         const finalStr = displayString;
         const finalCents = Math.round(parseFloat(displayString) * 100);
-        // ニアミス側のダミー表示。最終表示は必ず実測値 finalStr に戻す
         const fakeCents = (finalCents === TARGET_CENTS)
             ? TARGET_CENTS + 1
             : (finalCents < TARGET_CENTS ? finalCents - 1 : finalCents + 1);
@@ -1496,9 +1488,6 @@ function createParticles(count) {
     }
 }
 
-/* =========================================================
- * 🔒 隠し管理ページ ＆ 履歴保存・動的設定機能
- * ========================================================= */
 let longPressTimer = null;
 let configDirty = false;
 let configMsgTimer = null;
@@ -1717,7 +1706,7 @@ saveConfigBtn.addEventListener("click", () => {
     const prStr = ratioPretz.value.trim();
     const tStr = ratioToppo.value.trim();
 
-    if (pStr === "" || prStr === "" || tStr === "") {
+    if (pStr === "" || prStr === "") {
         alert("景品分配率はすべての項目を入力してください。");
         return;
     }
